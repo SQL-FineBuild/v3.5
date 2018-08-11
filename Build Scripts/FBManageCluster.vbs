@@ -237,7 +237,7 @@ Function GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat
   Dim strFailoverClusterIPAddresses, strClusterIPExtra, strClusterIPV4, strClusterIPV6
 
   strFailoverClusterIPAddresses = ""
-  strClusterIPExtra             = GetBuildfileValue("Clus" & strClusType & "IPExtra)"
+  strClusterIPExtra             = GetBuildfileValue("Clus" & strClusterType & "IPExtra")
   strClusterIPV4                = ""
   strClusterIPV6                = ""
 
