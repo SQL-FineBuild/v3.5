@@ -24,4 +24,4 @@ SQLFineExpress.bat		Example of installing a SQL Server Express Workstation build
 SQLFineFix.bat			Example of installing a SP and/or a CU to an existing SQL Server instance
 SQLFineInstance.bat		Example of adding a named instance to an existing SQL Server build
 SQLFineServer.bat		Example of installing a complex SQL Server build on to a server
-SQLFineWorkstation.bat		Example of installing SQL Server to a Workstation
+SQLFineWorkstation.bat		Example of installing a simple SQL Server build to a Workstation
