@@ -86,6 +86,8 @@ Function FormatFolder(strFolder)
   strFBRemote       = GetBuildfileValue("FBPathRemote")
 
   Select Case True
+    Case strFolder = ""
+      strFolderPath = ""
     Case Mid(strFolder, 2, 1) = ":"
       strFolderPath = strFolder
     Case Left(strFolder, 2) = "\\"
