@@ -23,4 +23,6 @@ CALL "SQLFineBuild.bat" %*     /Type:Full                    /IAcceptLicenseTerm
  /SetupPolyBase:Yes                          ^
  /PBDMSSvcAccount:"ROOT\ServGB_SQLPB_1$"     ^
  /PBEngSvcAccount:"ROOT\ServGB_SQLPB_1$"     ^
+ /SetupAnalytics:Yes                         ^
+ /ExtSvcAccount:"ROOT\ServGB_SQLES_1$"       ^
  /SETUPBPE:YES /VOLBPE:T /BPEFile:30GB

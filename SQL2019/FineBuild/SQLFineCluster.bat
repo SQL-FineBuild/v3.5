@@ -26,4 +26,6 @@ CALL "SQLFineBuild.bat" %*     /Type:Full                    /IAcceptLicenseTerm
  /SetupRSExec:Yes                            ^
  /RSEXECACCOUNT:"ROOT\APPGB_SQLRS_0001"      /RSEXECPASSWORD:"Prf53g#fdf$Efbv8QGH3"           ^
  /SetupPolyBase:Yes                          ^
- /PBDMSSvcAccount:"ROOT\ServGB_SQLPB_1$"     
+ /PBDMSSvcAccount:"ROOT\ServGB_SQLPB_1$"     ^
+ /SetupAnalytics:Yes                         ^
+ /ExtSvcAccount:"ROOT\ServGB_SQLES_1$"       
