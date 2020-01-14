@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageJob.vbs  
-'  Copyright FineBuild Team © 2017 - 2019.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2017 - 2020.  Distributed under Ms-Pl License
 '
 '  Purpose:      Manage Creation of SQL Agent and Windows Scheduler Jobs
 '
@@ -23,7 +23,7 @@ Class FBManageJobClass
 Dim objFSO, objJobSQL, objJobSQLData, objShell
 Dim strCmd, strCmdSQL, strDBA_DB, strDirBackup, strEdition, strHKLMSQL, strInstance, strInstReg, strInstSQL
 Dim strJobCategory, strJobCmd, strJobSaAccount, strJobId, strOSVersion, strPath, strPathMaint, strReport
-Dim strServInst, strSetupSQLAgent, strSqlAccount, strSqlPassword, strSQLOperator
+Dim strSchedLevel, strServInst, strSetupSQLAgent, strSqlAccount, strSqlPassword, strSQLOperator
 
 Private Sub Class_Initialize
   Call DebugLog("FBManageJob Class_Initialize:")
@@ -61,6 +61,15 @@ Private Sub Class_Initialize
   If strSetupSQLAgent <> "YES" Then
     Call SetupFolder(strPathMaint)
   End If
+
+  Select Case True
+    Case strOSVersion >= "6"
+      strSchedLevel = "2"
+    Case (Instr(Ucase(strOSName), " XP") > 0) And (Instr(strOSType, "STARTER") > 0)
+      strSchedLevel = "0"
+    Case Else
+      strSchedLevel = "1"
+  End Select
 
   objJobSQL.Provider = "SQLOLEDB"
   objJobSQL.ConnectionString = "Driver={SQL Server};Server=" & GetBuildfileValue("ServInst") & ";Database=master;Trusted_Connection=Yes;"
@@ -271,7 +280,20 @@ End Function
 
 
 Sub SetupWindowsJob(strJobName, strJobCategory, strReportOpt, strJobType, strStepCmd, strFreq, strTime)
-  Call DebugLog("Setup Windows Job: " & strJobName)
+  Call DebugLog("SetupWindowsJob: " & strJobName)
+
+  Select Case True
+    Case strSchedLevel = "0"
+      ' Nothing
+    Case Else
+      Call BuildWindowsJob(strJobName, strJobCategory, strReportOpt, strJobType, strStepCmd, strFreq, strTime)
+  End Select
+
+End Sub
+
+
+Sub BuildWindowsJob(strJobName, strJobCategory, strReportOpt, strJobType, strStepCmd, strFreq, strTime)
+  Call DebugLog("BuildWindowsJob: " & strJobName)
   Dim objFile
   Dim strPathJob
 
@@ -307,7 +329,12 @@ End Sub
 
 Private Function GetWinJobFolder()
 
-  GetWinJobFolder   = strInstSQL & "\"
+  Select Case True
+    Case strSchedLevel <= "1"
+      GetWinJobFolder = ""
+    Case Else
+      GetWinJobFolder = strInstSQL & "\"
+  End Select
 
 End Function
 
