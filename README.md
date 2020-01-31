@@ -15,7 +15,8 @@ Changes compared to v3.4.0:
 * Various small bug fixes
 * Added parameter /ClusWinSuffix:
 * Added parameters /ClusDBIPExtra: /ClusASIPExtra: /ClusRSIPExtra:
-* Added support for SQL Server 2019 RC1
+* Added support for SQL Server 2019
 * Added support for Windows Server 2019
+* Greatly improved support for Availability Groups
 
 SQL FineBuild v3.5.0 and v3.4.2 currently are identical
