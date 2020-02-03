@@ -10,6 +10,8 @@ The files for each release of SQL Server are found in the _SQL2019_, _SQL2017_, 
 
 Documentation is found on the [SQL FineBuild Wiki](https://github.com/SQL-FineBuild/Common/wiki).  Issues shoud be logged in the [Issues List](https://github.com/SQL-FineBuild/Common/issues).
 
+If you are new to SQL FineBuild, please see [SQL FineBuild QuickStart](https://github.com/SQL-FineBuild/Common/wiki/SQL-FineBuild-Quickstart).
+
 Changes compared to v3.4.0:
 
 * Various small bug fixes
