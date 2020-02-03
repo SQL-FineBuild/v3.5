@@ -20,5 +20,3 @@ Changes compared to v3.4.0:
 * Added support for SQL Server 2019
 * Added support for Windows Server 2019
 * Greatly improved support for Availability Groups
-
-SQL FineBuild v3.5.0 and v3.4.2 currently are identical
