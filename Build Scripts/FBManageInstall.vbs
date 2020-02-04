@@ -25,6 +25,7 @@
 '  InstFile      Setup.exe             File to be Installed after Setup processing is complete
 '  InstOption    Install               Install Option
 '  InstTarget    strPathTemp           Target Path for Setup processing
+'  LogClean                            Clean passwords from log file
 '  LogXtra                             Additional label for Log File
 '  MenuOption                          Control Menu setup
 '  MenuError     strMsgWarning         Error to be given if Menu File not found
@@ -409,13 +410,14 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   Call DebugLog("RunInstall_Process:")
   Dim strCmd, strCompatFlags, strHKCU, strInstFile, strInstOption, strInstPrompt, strInstType
   Dim strMode, strMSILayer, strMSIAutoOS, strOSType, strOSVersion
-  Dim strParmLog, strParmMonitor, strParmRetry, strPath, strPathCmd, strPathLog, strPathTemp
+  Dim strLogClean, strParmLog, strParmMonitor, strParmRetry, strPath, strPathCmd, strPathLog, strPathTemp
 
   RunInstall_Process = False
   strInstOption     = UCase(GetXMLParm(objInstParm, "InstOption", "Install"))
   strInstPrompt     = ""
   strInstFile       = Right(strPathInst, Len(strPathInst) - InstrRev(strPathInst, "\"))
   strInstType       = UCase(Right(strPathInst, 4))
+  strLogClean       = GetXMLParm(objInstParm, "LogClean", "")
   strMSILayer       = ""
   strCompatFlags    = GetBuildfileValue("CompatFlags")
   strHKCU           = &H80000001
@@ -572,6 +574,10 @@ Private Function RunInstall_Process(strInstName, objInstParm)
       Exit Function
   End Select
 
+  If strLogClean = "Y" Then
+    Call LogClean(strPathLog)
+  End If
+
   Select Case True
     Case Left(strPathInst, Len(strPathTemp)) <> strPathTemp
       ' Nothing
@@ -605,6 +611,23 @@ Private Function GetAppOS(strAppOS)
     Case Else
        GetAppOS     = ""
   End Select
+
+End Function
+
+
+Private Function LogClean(strPathLog)
+  Call DebugLog("LogClean: " & strPathLog)
+  Dim strOldData, strNewData
+
+  Set objFile = objFSO.OpenTextFile(strFileName, 1)
+  strOldData  = objFile.ReadAll
+  objFile.Close
+
+  strNewData  = HidePasswords(strOldData)
+
+  Set objFile = objFSO.OpenTextFile(strFileName, 2)
+  objFile.WriteLine strNewData
+  objFile.Close
 
 End Function
 

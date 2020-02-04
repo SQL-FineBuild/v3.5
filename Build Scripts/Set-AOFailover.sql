@@ -65,9 +65,9 @@ BEGIN;
   ,ROW_NUMBER() OVER(PARTITION BY AGName ORDER BY ars.replica_server_name)
   FROM @Parameters p
   JOIN [sys].[availability_groups] ag ON ag.name LIKE p.AGName
-  LEFT JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
+  JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
   LEFT JOIN [sys].[dm_hadr_availability_replica_states] arss ON arss.group_id = ag.group_id AND arss.replica_id = ars.replica_id AND arss.role <> 1
-  LEFT JOIN [sys].[availability_replicas] arp ON arp.group_id = ag.group_id
+  JOIN [sys].[availability_replicas] arp ON arp.group_id = ag.group_id
   LEFT JOIN [sys].[dm_hadr_availability_replica_states] arps ON arps.group_id = ag.group_id AND arps.replica_id = arp.replica_id AND arps.role = 1;
 
   UPDATE @AGServers SET
