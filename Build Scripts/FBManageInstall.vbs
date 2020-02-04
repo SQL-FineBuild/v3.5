@@ -619,13 +619,13 @@ Private Function LogClean(strPathLog)
   Call DebugLog("LogClean: " & strPathLog)
   Dim strOldData, strNewData
 
-  Set objFile = objFSO.OpenTextFile(strFileName, 1)
+  Set objFile = objFSO.OpenTextFile(strPathLog, 1)
   strOldData  = objFile.ReadAll
   objFile.Close
 
   strNewData  = HidePasswords(strOldData)
 
-  Set objFile = objFSO.OpenTextFile(strFileName, 2)
+  Set objFile = objFSO.OpenTextFile(strPathLog, 2)
   objFile.WriteLine strNewData
   objFile.Close
 
