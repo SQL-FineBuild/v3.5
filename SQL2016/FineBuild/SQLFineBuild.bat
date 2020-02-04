@@ -6,8 +6,8 @@ REM Created 30 Jun 2008 by Ed Vassie V1.0
 
 REM Setup Script Variables
 SET SQLCRASHID=
-SET SQLDEBUG=
-SET SQLFBDEBUG=REM
+IF '%SQLDEBUG~0,1%' NEQ '/' SET SQLDEBUG=
+IF '%SQLFBDEBUG%' == '' SET SQLFBDEBUG=REM
 SET SQLFBCMD=%~f0
 SET SQLFBPARM=%*
 SET SQLFBFOLDER=%~dp0
@@ -38,26 +38,25 @@ ECHO Copyright FineBuild Team (c) 2008 - %DATE:~6,4%.  Distributed under Ms-Pl L
 ECHO SQL FineBuild Wiki: https://github.com/SQL-FineBuild/Common/wiki
 ECHO Run on %COMPUTERNAME% by %USERNAME% at %TIME:~0,8% on %DATE%:
 ECHO %0 %SQLFBPARM%
-
 ECHO.
 ECHO ************************************************************
 ECHO %TIME:~0,8% *********** FineBuild Configuration starting
 
-%SQLFBDEBUG% %TIME:~0,8% Prepare Log file
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: Logfile (Prepare Log File)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:LogFile %SQLFBPARM%`) DO (SET SQLLOGTXT=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
 IF %SQLRC% NEQ 0 ECHO Process LogFile var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 
-%SQLFBDEBUG% %TIME:~0,8% Refresh SQLFBPARM value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: FBParm (Refresh %SQLFBPARM)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:FBParm %SQLFBPARM%`) DO (SET SQLFBPARM=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
 IF %SQLRC% NEQ 0 ECHO Process FBParm var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 
-%SQLFBDEBUG% %TIME:~0,8% Check Debug flag
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: Debug (Check Debugging requirements)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:Debug %SQLFBPARM%`) DO (SET SQLDEBUG=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
@@ -65,14 +64,14 @@ IF %SQLRC% NEQ 0 ECHO Process Debug var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 IF '%SQLDEBUG%' NEQ '' SET SQLFBDEBUG=ECHO
 
-%SQLFBDEBUG% %TIME:~0,8% Check PROCESSID value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: ProcessId (Refresh %SQLPROCESSID)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:ProcessId %SQLFBPARM% %SQLDEBUG%`) DO (SET SQLPROCESSID=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
 IF %SQLRC% NEQ 0 ECHO Process ProcessId var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 
-%SQLFBDEBUG% %TIME:~0,8% Check TYPE value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: Type (Refresh %SQLTYPE)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:Type %SQLFBPARM% %SQLDEBUG%`) DO (SET SQLTYPE=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
@@ -100,7 +99,7 @@ IF %SQLRC% NEQ 0 GOTO :ERROR
 
 ECHO %TIME:~0,8% *********** Refreshing environment variables
 
-%SQLFBDEBUG% %TIME:~0,8% Refresh TEMP value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: Temp (Refresh %TEMP)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:Temp %SQLFBPARM% %SQLDEBUG%`) DO (SET TEMP=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
@@ -108,7 +107,7 @@ IF %SQLRC% NEQ 0 ECHO Process TEMP var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 SET TMP=%TEMP%
 
-%SQLFBDEBUG% %TIME:~0,8% Refresh PSMODULEPATH value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: PathPS (Refresh %PSMODULEPATH)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:PathPS %SQLFBPARM% %SQLDEBUG%`) DO (SET PSModulePath=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
@@ -125,7 +124,7 @@ IF %SQLRC% NEQ 0 GOTO :ERROR
 
 ECHO %TIME:~0,8% *********** Refreshing environment variables
 
-%SQLFBDEBUG% %TIME:~0,8% Refresh TEMP value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: Temp (Refresh %TEMP)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:Temp %SQLFBPARM% %SQLDEBUG%`) DO (SET TEMP=%%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
@@ -133,7 +132,7 @@ IF %SQLRC% NEQ 0 ECHO Process TEMP var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 SET TMP=%TEMP%
 
-%SQLFBDEBUG% %TIME:~0,8% Refresh PATH value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: Path (Refresh %PATH)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:Path %SQLFBPARM% %SQLDEBUG%`) DO (PATH %%X)
 SET SQLRC=%ERRORLEVEL%
 IF %SQLRC% == 1 SET SQLRC=0
@@ -190,11 +189,11 @@ GOTO :END
 
 IF %SQLRC% == 3010 GOTO :REBOOT
 
-%SQLFBDEBUG% %TIME:~0,8% Refresh SQLCRASHID value
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: CrashId (Refresh %SQLCRASHID)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:CrashId %SQLFBPARM% %SQLDEBUG%`) DO (SET SQLCRASHID=%%X)
 ECHO %TIME:~0,8% Stopped in Process Id %SQLCRASHID%
 ECHO.
-%SQLFBDEBUG% %TIME:~0,8% Display FineBuild Log File
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: LogView (Display FineBuild Log File)
 CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:LogView
 ECHO %TIME:~0,8% Bypassing remaining processes
 
@@ -230,7 +229,7 @@ REM End Point for /ReportOnly:Yes
 %SQLFBDEBUG% %TIME:~0,8% Report FineBuild Configuration
 CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigReport.vbs" %SQLDEBUG%
 
-%SQLFBDEBUG% %TIME:~0,8% Display FineBuild Configuration Report
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar: ReportView (Display FineBuild Configuration Report)
 CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:ReportView
 POPD
 
