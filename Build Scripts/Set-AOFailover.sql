@@ -31,7 +31,7 @@ RETURNS @AGServers  TABLE
 AS
 -- FB_GetAGServers
 --
---  Copyright FineBuild Team © 2019.  Distributed under Ms-Pl License
+--  Copyright FineBuild Team © 2019 - 2020.  Distributed under Ms-Pl License
 --
 -- Get list of Servers and their roles in an Availability Group
 -- The routine will work out from the AG Name what type of availability group is involved, and process accordingly
@@ -59,16 +59,17 @@ BEGIN;
   ,CASE WHEN ag.is_distributed = 1 THEN 'D' WHEN ag.basic_features = 1 THEN 'B' WHEN ag.cluster_type_desc = 'none' THEN 'N' ELSE 'C' END AS AGType
   ,ars.availability_mode
   ,ISNULL(ag.required_synchronized_secondaries_to_commit, 0)
-  ,arp.replica_server_name
-  ,ars.replica_server_name
-  ,SUBSTRING(ISNULL(ars.endpoint_url, arp.endpoint_url), 7, CHARINDEX('.', ISNULL(ars.endpoint_url, arp.endpoint_url)) - 7)
+  ,arp.replica_server_name AS PrimaryServer
+  ,ars.replica_server_name AS SecondaryServer
+  ,SUBSTRING(ISNULL(ars.endpoint_url, arp.endpoint_url), 7, CHARINDEX('.', ISNULL(ars.endpoint_url, arp.endpoint_url)) - 7) AS EndpointServer
   ,ROW_NUMBER() OVER(PARTITION BY AGName ORDER BY ars.replica_server_name)
   FROM @Parameters p
   JOIN [sys].[availability_groups] ag ON ag.name LIKE p.AGName
-  JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
-  LEFT JOIN [sys].[dm_hadr_availability_replica_states] arss ON arss.group_id = ag.group_id AND arss.replica_id = ars.replica_id AND arss.role <> 1
   JOIN [sys].[availability_replicas] arp ON arp.group_id = ag.group_id
-  LEFT JOIN [sys].[dm_hadr_availability_replica_states] arps ON arps.group_id = ag.group_id AND arps.replica_id = arp.replica_id AND arps.role = 1;
+  JOIN [sys].[dm_hadr_availability_replica_states] arps ON arps.group_id = arp.group_id AND arps.replica_id = arp.replica_id AND arps.role = 1
+  JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
+  JOIN [sys].[dm_hadr_availability_replica_states] arss ON arss.group_id = ars.group_id AND arss.replica_id = ars.replica_id AND arss.role <> 1
+  
 
   UPDATE @AGServers SET
    TargetServer = 'Y'

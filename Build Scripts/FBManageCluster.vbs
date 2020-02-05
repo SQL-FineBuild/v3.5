@@ -302,8 +302,6 @@ End Function
 
 Function GetAddress(strAddress, strFormat, strPreserve)
   Call DebugLog("GetAddress: " & strAddress)
-  Dim colAddrs
-  Dim objAddr
   Dim strAddrType, strQuery, strRetAddress
 
   If strUserDNSDomain = "" Then
@@ -327,7 +325,6 @@ Function GetAddress(strAddress, strFormat, strPreserve)
    Case Else
       strRetAddress =  GetAddressWin32(strAddress, strAddrType, strFormat)
   End Select
-  Call DebugLog("Address found: """ & strRetAddress & """")
 
   Select Case True
     Case strUserDNSServer = ""
@@ -337,39 +334,28 @@ Function GetAddress(strAddress, strFormat, strPreserve)
       Set objWMIDNS = GetObject("winmgmts:{impersonationLevel=impersonate}!\\" & strUserDNSServer & "\root\MicrosoftDNS")
   End Select
 
-  strQuery          = ""
   Select Case True
     Case objWMIDNS Is Nothing
       ' Nothing
     Case strAddrType = "IPv4"
-      strQuery      = "SELECT * FROM MicrosoftDNS_AType    WHERE IPAddress   = """ & strAddress & """"
+      strQuery      = "SELECT * FROM MicrosoftDNS_AType     WHERE IPAddress   = """ & strAddress & """"
+      strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
     Case strAddrType = "IPv6"
-      strQuery      = "SELECT * FROM MicrosoftDNS_AAAAType WHERE IPV6Address = """ & strAddress & """"
+      strQuery      = "SELECT * FROM MicrosoftDNS_AAAAType  WHERE IPV6Address = """ & strAddress & """"
+      strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
+    Case strFormat = "Alias"
+      strQuery      = "SELECT * FROM MicrosoftDNS_CNAMEType WHERE OwnerName   = """ & strAddress & "." & strUserDNSDomain & """"
+      strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
     Case Else
-      strQuery      = "SELECT * FROM MicrosoftDNS_AType    WHERE OwnerName   = """ & strAddress & "." & strUserDNSDomain & """"
+      strQuery      = "SELECT * FROM MicrosoftDNS_AType     WHERE OwnerName   = """ & strAddress & "." & strUserDNSDomain & """"
+      strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
+      If strRetAddress = "" Then
+        strQuery    = "SELECT * FROM MicrosoftDNS_AAAAType  WHERE OwnerName   = """ & strAddress & "." & strUserDNSDomain & """"
+        strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
+      End If
   End Select
 
-  If strQuery > "" Then
-    strDebugMsg1    = "Query: " & strQuery
-    Set colAddrs    = objWMIDNS.ExecQuery(strQuery)
-    If colAddrs.Count > 0 Then
-      For Each objAddr In colAddrs
-        strDebugMsg2  = "Addr: " & objAddr.OwnerName
-        Select Case True
-          Case (strFormat = "IP") And (strAddrType = "IPv6")
-            strRetAddress = objAddr.IPV6Address
-          Case strFormat = "IP"
-            strRetAddress = objAddr.IPAddress
-          Case Else
-            strRetAddress = objAddr.OwnerName
-            If Instr(strRetAddress, ".") > 0 Then
-              strRetAddress = Left(strRetAddress, Instr(strRetAddress, ".") - 1)
-            End If
-        End Select        
-      Next
-    End If
-  End If
-
+  Call DebugLog("Address found: """ & strRetAddress & """")
   Select Case True
     Case strRetAddress <> ""
       ' Nothing
@@ -383,7 +369,7 @@ End Function
 
 
 Private Function GetAddressWin32(strAddress, strAddrType, strFormat)
-  Call DebugLog("GetAddressWin32")
+  Call DebugLog("GetAddressWin32:")
   Dim objAddr
   Dim strRetAddress
 
@@ -399,7 +385,7 @@ End Function
 
 
 Private Function GetAddressPing(strAddress, strAddrType, strFormat)
-  Call DebugLog("GetAddressPing")
+  Call DebugLog("GetAddressPing:")
   Dim arrReadAll
   Dim colAddrs
   Dim intLines, intAddrPos
@@ -424,6 +410,9 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
     Case strFormat = "IP"
       strRetAddress = Mid(strReadLine,  intAddrPos + 1)
       strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
+    Case strAddrType = "Alias"
+      strRetAddress = Mid(strReadLine,  intAddrPos + 1)
+      strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
     Case strAddrType = "Server"
       strRetAddress = strAddress
     Case Else
@@ -435,6 +424,42 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
   End Select
 
   GetAddressPing    = strRetAddress
+
+End Function
+
+
+Private Function GetAddressDNS(strQuery, strAddrType, strFormat)
+  Call DebugLog("GetAddressDNS: " & strQuery)
+  Dim colAddrs
+  Dim objAddr
+  Dim strRetAddress
+
+  strRetAddress     = ""
+  strDebugMsg1      = "Query: " & strQuery
+  Set colAddrs      = objWMIDNS.ExecQuery(strQuery)
+  If colAddrs.Count > 0 Then
+    For Each objAddr In colAddrs
+      strDebugMsg2  = "Addr: " & objAddr.OwnerName
+      Select Case True
+        Case (strFormat = "IP") And (strAddrType = "IPv6")
+          strRetAddress = objAddr.IPV6Address
+        Case strFormat = "IP"
+          strRetAddress = objAddr.IPAddress
+        Case strFormat = "Alias"
+          strRetAddress = objAddr.PrimaryName
+          If Instr(strRetAddress, ".") > 0 Then
+            strRetAddress = Left(strRetAddress, Instr(strRetAddress, ".") - 1)
+          End If
+        Case Else
+          strRetAddress = objAddr.OwnerName
+          If Instr(strRetAddress, ".") > 0 Then
+            strRetAddress = Left(strRetAddress, Instr(strRetAddress, ".") - 1)
+          End If
+      End Select        
+    Next
+  End If
+
+  GetAddressDNS     = strRetAddress
 
 End Function
 
@@ -489,6 +514,7 @@ End Function
 
 
 Private Function MergeAddrSuffix(strIPType, strBaseAddr, strSuffix)
+  Call DebugLog("MergeAddrSuffix:")
   Dim arrBase, arrSuffix
   Dim intBase, intSuffix
   Dim strMergeAddr

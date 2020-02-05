@@ -152,7 +152,8 @@ BEGIN;
       ,@SQLText   = '';
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''S'', @Message = @Message OUTPUT '
-      FROM #AGServers a;
+      FROM @Parameters p
+      JOIN #AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
@@ -164,7 +165,8 @@ BEGIN;
       ,@SQLText   = '';
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.PrimaryServer + ''', @RemoteCall=''Y'', @Operation = ''J'', @Message = @Message OUTPUT '
-      FROM #AGServers a;
+      FROM @Parameters p
+      JOIN #AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
@@ -176,7 +178,8 @@ BEGIN;
       ,@SQLText   = '';
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''E'', @Message = @Message OUTPUT '
-      FROM #AGServers a;
+      FROM @Parameters p
+      JOIN #AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;

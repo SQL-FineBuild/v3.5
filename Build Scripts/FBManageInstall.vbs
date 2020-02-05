@@ -20,7 +20,7 @@
 '  InstParm                            String containing XML Parameters
 '
 '  XML Parameters:
-'  CleanBoot                           Force Reboot if pending
+'  CleanBoot                           Force Reboot if reboot pending
 '  InstallError  strMsgWarning         Error given on failed Install
 '  InstFile      Setup.exe             File to be Installed after Setup processing is complete
 '  InstOption    Install               Install Option
@@ -410,7 +410,7 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   Call DebugLog("RunInstall_Process:")
   Dim strCmd, strCompatFlags, strHKCU, strInstFile, strInstOption, strInstPrompt, strInstType
   Dim strMode, strMSILayer, strMSIAutoOS, strOSType, strOSVersion
-  Dim strLogClean, strParmLog, strParmMonitor, strParmRetry, strPath, strPathCmd, strPathLog, strPathTemp
+  Dim strLogClean, strParmLog, strParmMonitor, strParmRetry, strPath, strPathCmd, strPathLog, strPathTemp, strTempClean
 
   RunInstall_Process = False
   strInstOption     = UCase(GetXMLParm(objInstParm, "InstOption", "Install"))
@@ -551,6 +551,7 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   End If
 
   strDebugMsg1      = "Log file: " & strPathLog
+  strTempClean      = "Y"
   Call Util_RunExec(strPathCmd, strInstPrompt, strResponseYes, -1)
   Select Case True
     Case intErrSave = 0
@@ -569,16 +570,21 @@ Private Function RunInstall_Process(strInstName, objInstParm)
       Call DebugLog("Retrying " & strInstName & " Install due to code " & Cstr(intErrSave))
       Call Util_RunExec(strCmd, "", "", 0)
     Case intErrSave = -2147205120 ' Install blocked
-      Exit Function
+      strTempClean  = ""
     Case Else
-      Exit Function
+      strTempClean  = ""
   End Select
 
-  If strLogClean = "Y" Then
-    Call LogClean(strPathLog)
-  End If
+  Select Case True
+    Case Not objFSO.FileExists(Replace(strPathLog, """", ""))
+      ' Nothing
+    Case strLogClean = "Y" 
+      Call LogClean(strPathLog)
+  End Select
 
   Select Case True
+    Case strTempClean <> "Y"
+      ' Nothing
     Case Left(strPathInst, Len(strPathTemp)) <> strPathTemp
       ' Nothing
     Case Left(strPathInst, InstrRev(strPathInst, "\") - 1) = strPathTemp
@@ -617,15 +623,20 @@ End Function
 
 Private Function LogClean(strPathLog)
   Call DebugLog("LogClean: " & strPathLog)
-  Dim strOldData, strNewData
+  Dim strLogFile, strOldData, strNewData
 
-  Set objFile = objFSO.OpenTextFile(strPathLog, 1)
-  strOldData  = objFile.ReadAll
+  strLogFile        = Replace(strPathLog, """", "")
+
+  strDebugMsg1      = "Reading Log"
+  Set objFile       = objFSO.OpenTextFile(strLogFile, 1)
+  strOldData        = objFile.ReadAll
   objFile.Close
 
-  strNewData  = HidePasswords(strOldData)
+  strDebugMsg1      = "Cleaning Log"
+  strNewData        = HidePasswords(strOldData)
 
-  Set objFile = objFSO.OpenTextFile(strPathLog, 2)
+  strDebugMsg1      = "Writing Log"
+  Set objFile       = objFSO.OpenTextFile(strLogFile, 2)
   objFile.WriteLine strNewData
   objFile.Close
 
