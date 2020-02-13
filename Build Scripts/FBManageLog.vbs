@@ -140,8 +140,8 @@ Sub LogClose()
   Call HideBuildPassword("StreamInsightPID")
   Call HideBuildPassword("TelSvcPassword")
 
-  strNumLogins      = GetBuildfileValue("NumLogins")
-  For intIdx = 1 to strNumLogins
+  strNumLogins      = "0" & GetBuildfileValue("NumLogins")
+  For intIdx = 1 To strNumLogins
     Call HideBuildPassword("UserPassword" & Right("0" & CStr(intIdx), 2))
   Next
 

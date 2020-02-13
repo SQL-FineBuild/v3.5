@@ -565,9 +565,11 @@ Private Function RunInstall_Process(strInstName, objInstParm)
       Exit Function
     Case intErrSave = -1073741818
       Call DebugLog("Retrying " & strInstName & " Install - Network connectivity workaround")
+      Wscript.Sleep strWaitShort
       Call Util_RunExec(strCmd, "", "", 0)
     Case (strParmRetry <> "0") And (Instr(" " & strParmRetry & " ", " " & Cstr(intErrSave) & " ") > 0)
       Call DebugLog("Retrying " & strInstName & " Install due to code " & Cstr(intErrSave))
+      Wscript.Sleep strWaitShort
       Call Util_RunExec(strCmd, "", "", 0)
     Case intErrSave = -2147205120 ' Install blocked
       strTempClean  = ""
@@ -637,7 +639,7 @@ Private Function LogClean(strPathLog)
 
   strDebugMsg1      = "Writing Log"
   Set objFile       = objFSO.OpenTextFile(strLogFile, 2)
-  objFile.WriteLine strNewData
+  objFile.Write strNewData
   objFile.Close
 
 End Function

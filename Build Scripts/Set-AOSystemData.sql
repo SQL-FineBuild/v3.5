@@ -281,7 +281,7 @@ BEGIN;
 
     SELECT
      @Message       = 'Starting System DB User Objects'
-    ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaSysDbUserObject  -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
+    ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaSysDbUserObject  -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Classic'''
     FROM @Parameters p
     JOIN #AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
@@ -351,8 +351,9 @@ BEGIN;
     WHILE @@FETCH_STATUS = 0  
     BEGIN;
       SELECT 
-       @SQLText     = 'IF EXISTS(SELECT 1 FROM [' + p.TargetServer + '].msdb.dbo.sysjobs WHERE name = ''' + @JobName + ''' AND enabled = 1) EXECUTE msdb.dbo.sp_update_job @job_name=''' + @JobName + ''',@enabled=1;'
-      FROM @Parameters p;
+      @SQLText     = 'IF EXISTS(SELECT 1 FROM [' + a.PrimaryServer + '].msdb.dbo.sysjobs WHERE name = ''' + @JobName + ''' AND enabled = 1) EXECUTE msdb.dbo.sp_update_job @job_name=''' + @JobName + ''',@enabled=1;'
+      FROM @Parameters p
+      JOIN #AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
       FETCH NEXT FROM Job_Names INTO @JobName;
@@ -407,6 +408,20 @@ CREATE TABLE [dbo].[FB_AGSystemDataJobExceptions]
 ,[AGName]      NVARCHAR(120) NOT NULL
 ,[JobName]     NVARCHAR(120) NOT NULL
 ,CONSTRAINT [PK_AGSystemDataJobExceptions] PRIMARY KEY CLUSTERED ([Id] ASC));
+CREATE UNIQUE NONCLUSTERED INDEX [IX_FB_AGSystemDataJobExceptions] ON [dbo].[FB_AGSystemDataJobExceptions]
+([AGNAME] ASC
+,[JobName] ASC);
+
+-- Create default exceptions (Assumes /SetupGenMaint:Yes)
+
+INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
+SELECT name, 'DBA: Create New Errorlog' FROM master.sys.availability_groups;
+INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
+SELECT name, 'DBA: Integrity Check - System Databases' FROM master.sys.availability_groups;
+INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
+SELECT name, 'DBA: Integrity Check - User Databases' FROM master.sys.availability_groups;
+INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
+SELECT name, 'DBA: Move Cluster Core' FROM master.sys.availability_groups;
 
 -- Create database roles
 
@@ -417,7 +432,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.sysusers WHERE name = '$(strAccount)') EXEC sp_
 EXEC sp_addrolemember 'FB_AGSystemData','$(strAccount)';
 GO
 
-USE msdb
+USE [msdb]
 GO
 
 EXEC sp_addrole 'FB_AGSystemData',dbo;
@@ -428,22 +443,22 @@ GRANT SELECT  ON dbo.sysjobschedules    TO FB_AGSystemData;
 GRANT SELECT  ON dbo.sysschedules       TO FB_AGSystemData;
 IF NOT EXISTS (SELECT 1 FROM sys.sysusers WHERE name = '$(strAccount)') EXEC sp_grantdbaccess '$(strAccount)';
 EXEC sp_addrolemember 'FB_AGSystemData','$(strAccount)';
+EXEC sp_addrolemember 'SQLAgentOperatorRole','FB_AGSystemData';
 GO
 
 -- Create Job to run System Data Copy
 
-BEGIN TRANSACTION
-DECLARE @ReturnCode INT
-SELECT @ReturnCode = 0
+BEGIN TRANSACTION;
+DECLARE @ReturnCode INT;
+SELECT @ReturnCode = 0;
 
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'DBA Tasks' AND category_class=1)
-BEGIN
-EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'DBA Tasks'
-IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+BEGIN;
+  EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'DBA Tasks';
+  IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback;
+END;
 
-END
-
-DECLARE @jobId BINARY(16)
+DECLARE @jobId BINARY(16);
 EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'DBA: Copy System Data', 
 		@enabled=1, 
 		@notify_level_eventlog=0, 
@@ -453,9 +468,9 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'DBA: Copy System Data',
 		@delete_level=0, 
 		@description=N'No description available.', 
 		@category_name=N'DBA Tasks', 
-		@owner_login_name=N'sa', @job_id = @jobId OUTPUT
-IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-/****** Object:  Step [Copy System Data]    Script Date: 30/01/2020 14:57:51 ******/
+		@owner_login_name=N'sa', @job_id = @jobId OUTPUT;
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback;
+
 EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_name=N'DBA: Copy System Data', @step_name=N'Copy System Data', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
@@ -468,10 +483,10 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_name=N'DBA: Copy System Data', @
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC FB_AGSystemData', 
 		@database_name=N'master', 
-		@flags=4
-IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
-IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+		@flags=4;
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback;
+EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1;
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback;
 EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_name=N'DBA: Copy System Data', @name=N'Every 3 Hours', 
 		@enabled=1, 
 		@freq_type=4, 
@@ -483,13 +498,13 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_name=N'DBA: Copy System Data
 		@active_start_date=20000101, 
 		@active_end_date=99991231, 
 		@active_start_time=0, 
-		@active_end_time=235959
-IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
-IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-COMMIT TRANSACTION
-GOTO EndSave
+		@active_end_time=235959;
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback;
+EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)';
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback;
+COMMIT TRANSACTION;
+GOTO EndSave;
 QuitWithRollback:
-    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION;
 EndSave:
 GO

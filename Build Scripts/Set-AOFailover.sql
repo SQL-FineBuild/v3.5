@@ -157,12 +157,11 @@ BEGIN;
      @SQLText          = 'Performing Failover of: ' + p.AGName
     FROM #Parameters p;
     SELECT
-     @SQLText          = @SQLText + p.CRLF + 'Current Primary Server: '   + a.ServerName
+     @SQLText          = @SQLText + p.CRLF + 'Current Primary Server: '   + a.PrimaryServer
     FROM #Parameters p
-    JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.ServerRole = 'P';
+    JOIN #AGServers a ON a.AGName LIKE p.AGName;
     SELECT
-     @SQLText          = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.ServerName  
+     @SQLText          = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.SecondaryServer
     FROM #Parameters p
     JOIN #AGServers a ON a.AGName LIKE p.AGName
     WHERE a.TargetServer = 'Y';
@@ -172,62 +171,58 @@ BEGIN;
     PRINT @SQLText;
     
     SELECT
-     @SQLText       = p.CRLF + 'EXECUTE [' + a.ServerName + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''S'''
+     @SQLText       = p.CRLF + 'EXECUTE [' + a.PrimaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''S'''
     FROM #Parameters p
-    JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.ServerRole = 'P';
+    JOIN #AGServers a ON a.AGName LIKE p.AGName;
     IF (SELECT ExecProcess FROM #Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
     IF (SELECT ExecProcess FROM #Parameters) <> 'Y' PRINT @SQLText;
 
     SELECT
-     @SQLText       = p.CRLF + 'EXECUTE [' + a.ServerName + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''S'''
+     @SQLText       = p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''S'''
     FROM #Parameters p
-    JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.ServerRole = 'S';
+    JOIN #AGServers a ON a.AGName LIKE p.AGName;
     IF (SELECT ExecProcess FROM #Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
     IF (SELECT ExecProcess FROM #Parameters) <> 'Y' PRINT @SQLText;
 	
     SELECT
-     @SQLText       = p.CRLF + 'EXECUTE [' + a.ServerName + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''R'''
+     @SQLText       = p.CRLF + 'EXECUTE [' + a.PrimaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''R'''
     FROM #Parameters p
-    JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.ServerRole = 'P';
+    JOIN #AGServers a ON a.AGName LIKE p.AGName;
     IF (SELECT ExecProcess FROM #Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
     IF (SELECT ExecProcess FROM #Parameters) <> 'Y' PRINT @SQLText;
  
     SELECT
-     @SQLText       = p.CRLF + 'EXECUTE [' + a.ServerName + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''F'''
+     @SQLText       = p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''F'''
     FROM #Parameters p
-    JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.TargetServer = 'Y';
+    JOIN #AGServers a ON a.AGName LIKE p.AGName;
     IF (SELECT ExecProcess FROM #Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
     IF (SELECT ExecProcess FROM #Parameters) <> 'Y' PRINT @SQLText;
 
     SELECT
-     @SQLText       = p.CRLF + 'EXECUTE [' + a.ServerName + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''A'''
+     @SQLText       = p.CRLF + 'EXECUTE [' + a.PrimaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''A'''
     FROM #Parameters p
     JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.ServerRole = 'P' AND (a.AvailabilityMode = 0 OR a.AGType = 'D');
+    WHERE a.AvailabilityMode = 0 OR a.AGType = 'D';
     IF (SELECT ExecProcess FROM #Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
     IF (SELECT ExecProcess FROM #Parameters) <> 'Y' PRINT @SQLText;
 
     SELECT
-     @SQLText       = p.CRLF + 'EXECUTE [' + a.ServerName + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''A'''
+     @SQLText       = p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @RemoteCall=''Y'',@Operation = ''A'''
     FROM #Parameters p
     JOIN #AGServers a ON a.AGName LIKE p.AGName
-    WHERE a.ServerRole = 'S' AND (a.AvailabilityMode = 0 OR a.AGType = 'D');
+    WHERE a.AvailabilityMode = 0 OR a.AGType = 'D';
     IF (SELECT ExecProcess FROM #Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
     IF (SELECT ExecProcess FROM #Parameters) <> 'Y' PRINT @SQLText;
 	
     SELECT
      @SQLText       = REPLICATE('*', 40) +
-                      p.CRLF + 'SQL Failover of ' + p.AGName + ' to ' + a.ServerName + ' complete'
+                      p.CRLF + 'SQL Failover of ' + p.AGName + ' to ' + a.SecondaryServer + ' complete'
     FROM #Parameters p
     JOIN #AGServers a ON a.AGName = p.AGName
     WHERE a.TargetServer = 'Y';
     SELECT
      @SQLText       = @SQLText +
-                      p.CRLF + 'Update DNS Alias for ' + p.AGName + ' to point to ' + a.ServerName
+                      p.CRLF + 'Update DNS Alias for ' + p.AGName + ' to point to ' + a.SecondaryServer
     FROM #Parameters p
     JOIN #AGServers a ON a.AGName = p.AGName
     WHERE a.TargetServer = 'Y' AND a.AGType = 'D';

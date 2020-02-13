@@ -307,6 +307,7 @@ Function GetAddress(strAddress, strFormat, strPreserve)
   If strUserDNSDomain = "" Then
     strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
     strUserDNSServer  = GetBuildfileValue("UserDNSServer")
+    strOSVersion      = GetBuildfileValue("OSVersion")
   End If
 
   objRE.Pattern     = "^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
@@ -335,6 +336,8 @@ Function GetAddress(strAddress, strFormat, strPreserve)
   End Select
 
   Select Case True
+    Case strRetAddress <> ""
+      ' Nothing
     Case objWMIDNS Is Nothing
       ' Nothing
     Case strAddrType = "IPv4"

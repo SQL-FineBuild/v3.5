@@ -327,10 +327,22 @@ End Function
 Function Max(intA, intB)
 
   Select Case True
-    Case CInt(intA) > CInt(intB)
+    Case CLng(intA) > CLng(intB)
       Max           = intA
     Case Else
       Max           = intB
+  End Select
+
+End Function
+
+
+Function Min(intA, intB)
+
+  Select Case True
+    Case CLng(intA) > CLng(intB)
+      Min           = intB
+    Case Else
+      Min           = intA
   End Select
 
 End Function
@@ -961,6 +973,10 @@ End Function
 
 Function Max(intA, intB)
   Max               = FBUtils.Max(intA, intB)
+End Function
+
+Function Min(intA, intB)
+  Min               = FBUtils.Min(intA, intB)
 End Function
 
 Sub ResetDBAFilePerm(strFolder)
