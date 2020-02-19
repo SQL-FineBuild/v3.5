@@ -24,7 +24,7 @@ Class FBManageBuildFileClass
 Dim colBuildfile, colMessage, colStatefile
 Dim objAttribute, objFSO, objMessages, objShell, objStatefile
 Dim intBuildMsg, intFound
-Dim strBuildfile, strPathFBStart, strMessageOut, strMessagePrefix, strMessageRead, strProcessId, strStatefile, strValue
+Dim strBuildfile, strMessageOut, strMessagePrefix, strMessageRead, strProcessId, strStatefile, strValue
 
 
 Private Sub Class_Initialize

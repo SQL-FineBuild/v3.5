@@ -20,7 +20,7 @@ Dim FBManageCluster: Set FBManageCluster = New FBManageClusterClass
 Class FBManageClusterClass
   Dim objShell, objRE, objWMI, objWMIDNS, objWMIReg
   Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network, strClusStorage, strClusterName, strCmd, strCSVRoot
-  Dim strFailoverClusterDisks, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer
+  Dim strFailoverClusterDisks, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong
   Dim intIndex
 
 
@@ -48,6 +48,8 @@ Private Sub Class_Initialize
   strPreferredOwner = GetBuildfileValue("PreferredOwner")
   strServer         = GetBuildfileValue("AuditServer")
   strSQLVersion     = GetBuildfileValue("SQLVersion")
+  strWaitLong       = GetBuildfileValue("WaitLong")
+
   strUserDNSDomain  = ""
   Set objWMIDNS     = Nothing
 
@@ -112,10 +114,18 @@ Sub AddChildNode(strProcess, strResourceName)
 End Sub
 
 
-Sub MoveGroup(strClusterGroup)
+Sub MoveGroup(strClusterGroup, strNode)
   Call DebugLog("MoveGroup:" & strClusterGroup)
+  Dim strNewNode
 
-  strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /MOVETO:""" & strServer & """ "
+  Select Case True
+    Case strNode = ""
+      strNewNode    = strServer
+    Case Else
+      strNewNode    = strNode
+  End Select
+
+  strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /MOVETO:""" & strNewNode & """ "
   Call Util_RunExec(strCmd, "", strResponseYes, 0)
 
 End Sub
@@ -137,7 +147,7 @@ Sub SetOwnerNode(strClusterGroup)
   If strPreferredOwner = strServer Then
     strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /SETOWNERS:""" & strServer & """ "
     Call Util_RunExec(strCmd, "", strResponseYes, 0)
-    Call MoveGroup(strClusterGroup)
+    Call MoveGroup(strClusterGroup, "")
   End If
 
 End Sub
@@ -308,6 +318,7 @@ Function GetAddress(strAddress, strFormat, strPreserve)
     strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
     strUserDNSServer  = GetBuildfileValue("UserDNSServer")
     strOSVersion      = GetBuildfileValue("OSVersion")
+    strWaitLong       = GetBuildfileValue("WaitLong")
   End If
 
   objRE.Pattern     = "^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
@@ -339,7 +350,9 @@ Function GetAddress(strAddress, strFormat, strPreserve)
     Case strRetAddress <> ""
       ' Nothing
     Case objWMIDNS Is Nothing
-      ' Nothing
+      If strAddrType = "Server" Then
+        strRetAddress = strServer
+      End If
     Case strAddrType = "IPv4"
       strQuery      = "SELECT * FROM MicrosoftDNS_AType     WHERE IPAddress   = """ & strAddress & """"
       strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
@@ -416,8 +429,9 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
     Case strAddrType = "Alias"
       strRetAddress = Mid(strReadLine,  intAddrPos + 1)
       strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
-    Case strAddrType = "Server"
-      strRetAddress = strAddress
+    Case (strAddrType = "Server") And (intAddrPos > 0)
+      strRetAddress = Mid(strReadLine,  intAddrPos + 1)
+      strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
     Case Else
       strRetAddress = Left(strReadLine, intAddrPos - 2)
       strRetAddress = Mid(strRetAddress, InstrRev(strRetAddress, " ") + 1)
@@ -731,8 +745,8 @@ Sub AddChildNode(strProcess, strResourceName)
   Call FBManageCluster.AddChildNode(strProcess, strResourceName)
 End Sub
 
-Sub MoveGroup(strClusterGroup)
-  Call FBManageCluster.MoveGroup(strClusterGroup)
+Sub MoveGroup(strClusterGroup, strNode)
+  Call FBManageCluster.MoveGroup(strClusterGroup, strNode)
 End Sub
 
 Sub RemoveOwner(strNetworkName)
