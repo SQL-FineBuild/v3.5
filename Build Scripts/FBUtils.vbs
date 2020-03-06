@@ -18,7 +18,7 @@
 Option Explicit
 Dim FBUtils: Set FBUtils = New FBUtilsClass
 Dim intErrSave
-Dim strCmd, strHKCR, strHKLM, strHKLMSQL, strErrSave, strResponseYes, strResponseNo
+Dim strErrSave, strResponseYes, strResponseNo
 
 Class FBUtilsClass
 
@@ -43,8 +43,6 @@ Private Sub Class_Initialize
 
   intErrSave        = 0
   strErrSave        = ""
-  strHKCR           = &H80000000
-  strHKLM           = &H80000002
   strBuiltinDom     = ""
 
   If strProcessIdCode <> "FBCV" Then
@@ -437,7 +435,7 @@ Sub RunCacls(strCmd)
   Call DebugLog("RunCacls: " & strCmd)
   Dim arrCmd
   Dim intUBound, intIdx, intIdx2
-  Dim strNTService
+  Dim strNTService, strShareDrive
 
   arrCmd            = Split(strCmd)
   intUBound         = UBound(arrCmd)
@@ -474,7 +472,12 @@ Sub RunCacls(strCmd)
     Exit Sub
   End If
 
-  Call Util_RunExec(strProgCacls & " " & strCmd, "", strResponseYes, -1)
+  strShareDrive     = ""
+  If Instr(strCmd, "\\") > 0 Then
+    strShareDrive   = GetShareDrive(strCmd)
+  End If
+
+  Call Util_RunExec(strProgCacls & " " & strCmd, "EOF", strResponseYes, -1)
   Select Case True
     Case intErrSave = 0
       ' Nothing
@@ -493,7 +496,41 @@ Sub RunCacls(strCmd)
   End Select
   Wscript.Sleep strWaitShort ' Allow time for CACLS processing to complete
 
+  If strShareDrive <> "" Then
+    Call Util_RunExec("NET USE " & strShareDrive & " /DELETE", "EOF", "", -1)
+  End If
+
 End Sub
+
+
+Private Function GetShareDrive(strCmd)
+  Call DebugLog("GetShareDrive:")
+  Dim intIdx, intIdx2, intIdx3
+  Dim strAlphabet, strDriveList, strShare, strShareDrive
+
+  strAlphabet       = GetBuildfileValue("Alphabet")
+  strDriveList      = GetBuildfileValue("DriveList")
+  strShareDrive     = ""
+  For intIdx = 3 To Len(strAlphabet)
+    If Instr(strDriveList, Mid(strAlphabet, intIdx, 1)) = 0 Then
+      strShareDrive = Mid(strAlphabet, intIdx, 1) & ":"
+      Exit For
+    End If
+  Next
+
+  If strShareDrive <> "" Then
+    intIdx          = Instr(strCmd, "\\")
+    intIdx2         = Instr(intIdx  + 2, strCmd, "\")
+    intIdx3         = Instr(intIdx2 + 1, strCmd, """")
+    strShare        = Mid(strCmd, intIdx, (intIdx3 - intIdx1) - intIdx)
+    Call Util_RunExec("NET USE " & strShareDrive & " """ & strShare & """ /PERSISTENT:NO", "EOF", "", 0)
+    strCmd          = Left(strCmd, intIdx - 1) & strShareDrive & Mid(strCmd, intIdx3)
+    Wscript.Sleep strWaitShort
+  End If
+
+  GetShareDrive     = strShareDrive
+
+End Function
 
 
 Sub SetupFolder(strFolder)
@@ -594,12 +631,14 @@ Sub SetParam(strParamName, strParam, strNewValue, strMessage, ByRef strList)
       strParam      = strNewValue
     Case strBuildValue = strNewValue
       strParam      = strNewValue
-    Case strMessage = ""
+    Case strMessage <> ""
+      strParam      = strNewValue
+      Call SetBuildMessage(strMsgInfo, Left(strParamName & Space(24), Max(Len(strParamName), 24)) & " set to " & strNewValue & ": " & strMessage)
+    Case strList <> ""
       strParam      = strNewValue
       strList       = strList & " " & strParamName
     Case Else
       strParam      = strNewValue
-      Call SetBuildMessage(strMsgInfo, Left(strParamName & Space(24), Max(Len(strParamName), 24)) & " set to " & strNewValue & ": " & strMessage)
   End Select
 
 End Sub

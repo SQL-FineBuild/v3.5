@@ -16,9 +16,9 @@
 '
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Option Explicit
-Dim FBManageBuildFile: Set FBManageBuildFile = New FBManageBuildFileClass
 Dim objBuildfile
-Dim strMsgError, strMsgErrorConfig, strMsgWarning, strMsgIgnore, strMsgInfo
+Dim strCmd, strHKCR, strHKLM, strHKLMSQL, strMsgError, strMsgErrorConfig, strMsgWarning, strMsgIgnore, strMsgInfo
+Dim FBManageBuildFile: Set FBManageBuildFile = New FBManageBuildFileClass
 
 Class FBManageBuildFileClass
 Dim colBuildfile, colMessage, colStatefile
@@ -40,6 +40,9 @@ Private Sub Class_Initialize
   If strBuildfile = "%SQLLOGTXT%" Then
     Exit Sub
   End If
+
+  strHKCR           = &H80000000
+  strHKLM           = &H80000002
 
   Call LinkBuildfile(strBuildfile)
 

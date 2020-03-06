@@ -15,12 +15,13 @@
 '
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Option Explicit
+Dim objCluster
 Dim FBManageCluster: Set FBManageCluster = New FBManageClusterClass
 
 Class FBManageClusterClass
   Dim objShell, objRE, objWMI, objWMIDNS, objWMIReg
-  Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network, strClusStorage, strClusterName, strCmd, strCSVRoot
-  Dim strFailoverClusterDisks, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong
+  Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network, strClusStorage, strClusterHost, strClusterName, strCmd, strCSVRoot
+  Dim strFailoverClusterDisks, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
   Dim intIndex
 
 
@@ -42,16 +43,24 @@ Private Sub Class_Initialize
   strClusIPV6Mask     = GetBuildfileValue("ClusIPV6Mask")
   strClusIPV6Network  = GetBuildfileValue("ClusIPV6Network")
   strClusStorage    = GetBuildfileValue("ClusStorage")
-  strClusterName    = GetBuildfileValue("ClusterName")
+  strClusterHost    = ""
   strCSVRoot        = GetBuildfileValue("CSVRoot")
   strOSVersion      = GetBuildfileValue("OSVersion")
   strPreferredOwner = GetBuildfileValue("PreferredOwner")
   strServer         = GetBuildfileValue("AuditServer")
   strSQLVersion     = GetBuildfileValue("SQLVersion")
   strWaitLong       = GetBuildfileValue("WaitLong")
+  strWaitShort      = GetBuildfileValue("WaitShort")
 
   strUserDNSDomain  = ""
   Set objWMIDNS     = Nothing
+
+  objWMIReg.GetStringValue strHKLM,"Cluster\","ClusterName",strClusterName
+  If strClusterName > "" Then
+    strClusterHost  = "YES"
+  End If
+  Call SetBuildfileValue("ClusterHost", strClusterHost)
+  Call OpenCluster()
 
 End Sub
 
@@ -84,8 +93,7 @@ Sub AddChildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName
 
   strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /CREATE /GROUP:""" & strClusterGroup & """ /TYPE:""Generic Service"" /PROP DESCRIPTION=""" & strServiceDesc & """"
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
-  strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /OFF" 
-  Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  Call SetResourceOff(strResourceName, "")
 
   If strResourceName <> "" Then
     Call SetupClusterService(strClusterGroup, strResourceName, strServiceName, "", strServiceDesc, strServiceCheck)
@@ -102,20 +110,52 @@ End Sub
 Sub AddChildNode(strProcess, strResourceName)
   Call DebugLog("AddChildNode: " & strProcess)
 
-  strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /OFF" 
-  Call Util_RunExec(strCmd, "", strResponseYes, 0) ' Ensure Resource is offline 
+  Call SetResourceOff(strResourceName, "") 
 
   strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /ADDOWNER:""" & strServer & """" 
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
 
-  strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /ON"
-  Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  Call SetResourceOn(strResourceName, "")
 
 End Sub
 
 
-Sub MoveGroup(strClusterGroup, strNode)
-  Call DebugLog("MoveGroup:" & strClusterGroup)
+Function GetPrimaryNode(strGroup)
+  Call DebugLog("GetPrimaryNode: " & strGroup)
+  Dim colClusGroups, colClusResources, colOwnerNodes
+  Dim objClusGroup, objClusResource, objOwnerNode
+  Dim strPrimaryNode, strOwnerNode
+
+  strPrimaryNode    = ""
+  Set colClusGroups = objCluster.ResourceGroups
+  For Each objClusGroup In colClusGroups
+    If objClusGroup.Name = strGroup Then
+      strOwnerNode         = objClusGroup.OwnerNode.Name
+      Set colClusResources = objClusGroup.CommonProperties.ResourceGroups
+      For Each objClusResource In colClusResources
+        Set colOwnerNodes = objClusResource.PossibleOwnerNodes
+        For Each objOwnerNode In colOwnerNodes
+          Select Case True
+            Case strOwnerNode = objOwnerNode.CommonProperties.NodeName
+              strPrimaryNode  = strOwnerNode
+              Exit For
+            Case Else
+              strPrimaryNode  = objOwnerNode.CommonProperties.NodeName
+          End Select
+        Next
+        Exit For
+      Next
+      Exit For
+    End If
+  Next
+
+  GetPrimaryNode    = strPrimaryNode
+
+End Function
+
+
+Sub MoveToGroup(strClusterGroup, strNode)
+  Call DebugLog("MoveToGroup:" & strClusterGroup)
   Dim strNewNode
 
   Select Case True
@@ -127,6 +167,39 @@ Sub MoveGroup(strClusterGroup, strNode)
 
   strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /MOVETO:""" & strNewNode & """ "
   Call Util_RunExec(strCmd, "", strResponseYes, 0)
+
+End Sub
+
+
+Private Sub OpenCluster()
+  Call DebugLog("OpenCluster:")
+  On Error Resume Next
+
+  strClusterName    = ""
+  Set objCluster    = CreateObject("MSCluster.Cluster")
+  objCluster.Open ""
+  Select Case True
+    Case err.Number = 0
+      Wscript.Sleep strWaitLong
+    Case Else ' Network stack must be ready when Cluster Service starts, otherwise RPC error (often 1722) given.  Restart Cluster and wait so it can become ready.
+      Call Util_RunExec("NET STOP  ""Cluster Service""", "", strResponseYes, 0)
+      Wscript.Sleep strWaitLong
+      Call Util_RunExec("NET START ""Cluster Service""", "", strResponseYes, 0)
+      Wscript.Sleep strWaitLong
+      Wscript.Sleep strWaitLong
+      Wscript.Sleep strWaitLong
+      objCluster.Open ""
+  End Select
+
+  intErrSave        = err.Number
+  Select Case True
+    Case IsNull(objCluster)
+      ' Nothing
+    Case Else
+      strClusterName = UCase(objCluster.Name)
+  End Select
+  Call SetBuildfileValue("ClusterName", strClusterName)
+  Wscript.Sleep strWaitShort
 
 End Sub
 
@@ -147,7 +220,7 @@ Sub SetOwnerNode(strClusterGroup)
   If strPreferredOwner = strServer Then
     strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /SETOWNERS:""" & strServer & """ "
     Call Util_RunExec(strCmd, "", strResponseYes, 0)
-    Call MoveGroup(strClusterGroup, "")
+    Call MoveToGroup(strClusterGroup, "")
   End If
 
 End Sub
@@ -169,11 +242,8 @@ Private Sub SetupClusterGroup(strClusterGroup, strPriority)
   strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /CREATE"
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
 
-  strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /OFF" 
-  Call Util_RunExec(strCmd, "", strResponseYes, 0) ' Ensure cluster is offline in case it already exists
-
-  strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /MOVETO:""" & strServer & """" 
-  Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  Call SetResourceOff(strClusterGroup, "GROUP")
+  Call MoveToGroup(strClusterGroup, "")
 
   If strOSVersion >= "6.2" Then
     strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /PROP Priority=" & strPriorityValue
@@ -359,7 +429,7 @@ Function GetAddress(strAddress, strFormat, strPreserve)
     Case strAddrType = "IPv6"
       strQuery      = "SELECT * FROM MicrosoftDNS_AAAAType  WHERE IPV6Address = """ & strAddress & """"
       strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
-    Case strFormat = "Alias"
+    Case UCase(strFormat) = "ALIAS"
       strQuery      = "SELECT * FROM MicrosoftDNS_CNAMEType WHERE OwnerName   = """ & strAddress & "." & strUserDNSDomain & """"
       strRetAddress = GetAddressDNS(strQuery, strAddrType, strFormat)
     Case Else
@@ -391,9 +461,12 @@ Private Function GetAddressWin32(strAddress, strAddrType, strFormat)
 
   strRetAddress     = ""
   Set objAddr       = objWMI.Get("Win32_PingStatus.Address='" & strAddress & "',ResolveAddressNames=True,TypeOfService=4")
-  If objAddr.StatusCode = 0 Then
-    strRetAddress   =  GetAddressPing(strAddress, strAddrType, strFormat)
-  End If
+  Select Case True
+    Case objAddr.StatusCode = 0
+      strRetAddress =  objAddr.ProtocolAddress
+    Case Else
+      strRetAddress =  GetAddressPing(strAddress, strAddrType, strFormat)
+  End Select
 
   GetAddressWin32   = strRetAddress
 
@@ -426,7 +499,7 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
     Case strFormat = "IP"
       strRetAddress = Mid(strReadLine,  intAddrPos + 1)
       strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
-    Case strAddrType = "Alias"
+    Case UCase(strFormat) = "ALIAS"
       strRetAddress = Mid(strReadLine,  intAddrPos + 1)
       strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
     Case (strAddrType = "Server") And (intAddrPos > 0)
@@ -462,7 +535,7 @@ Private Function GetAddressDNS(strQuery, strAddrType, strFormat)
           strRetAddress = objAddr.IPV6Address
         Case strFormat = "IP"
           strRetAddress = objAddr.IPAddress
-        Case strFormat = "Alias"
+        Case UCase(strFormat) = "ALIAS"
           strRetAddress = objAddr.PrimaryName
           If Instr(strRetAddress, ".") > 0 Then
             strRetAddress = Left(strRetAddress, Instr(strRetAddress, ".") - 1)
@@ -592,6 +665,7 @@ Private Function CheckAddressUsed(strClusterName, strClusIPAddr)
         ' Nothing
       Case strAddress = strClusIPAddr
         CheckAddressUsed = True
+        Exit For
    End Select
   Next
 
@@ -604,8 +678,7 @@ Private Sub MoveClusterVolume(strClusterGroup, strResourceName, strVolList)
   Dim strVolLabel, strVolParam, strVolSource, strVolType
   Dim intVol
 
-  strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusStorage & """ /MOVETO:""" & strServer & """" 
-  Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  Call MoveToGroup(strClusStorage, "")
 
   arrVolumes        = Split(strVolList, " ")
   strFailoverClusterDisks = GetBuildfileValue("FailoverClusterDisks")
@@ -687,14 +760,12 @@ Private Function MoveClusterDrive(strClusterGroup, strVolParam)
       Case Instr(strFailoverClusterDisks, """" & strVolLabel & """") > 0
         ' Nothing
       Case Else
+        Call SetResourceOff(strVolLabel, "")
         strDebugMsg1            = "Moving " & strVolLabel & " to " & strClusterGroup
         strFailoverClusterDisks = strFailoverClusterDisks & """" & strVolLabel & """ "
-        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strVolLabel & """ /OFF"
-        Call Util_RunExec(strCmd, "", strResponseYes, 0)
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strVolLabel & """ /MOVE:""" & strClusterGroup & """"
         Call Util_RunExec(strCmd, "", strResponseYes, 183)
-        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strVolLabel & """ /ON"
-        Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        Call SetResourceOn(strVolLabel, "")
     End Select
   Next
 
@@ -703,10 +774,35 @@ Private Function MoveClusterDrive(strClusterGroup, strVolParam)
 End Function
 
 
-Sub SetResourceOn(strResource)
-  Call DebugLog("SetResourceOn: " & strResource)
+Sub SetResourceOff(strResource, strResourceType)
+  Call DebugLog("SetResourceOff: " & strResource)
+  Dim strType
+  
+  Select Case True
+    Case strResourceType = ""
+      strType       = "RESOURCE"
+    Case Else
+      strType       = strResourceType
+  End Select
 
-  strCmd       = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResource & """ /ON"
+  strCmd            = "CLUSTER """ & strClusterName & """ " & strType & " """ & strResource & """ /OFF"
+  Call Util_RunExec(strCmd, "", strResponseYes, "5064")
+
+End Sub
+
+
+Sub SetResourceOn(strResource, strResourceType)
+  Call DebugLog("SetResourceOn: " & strResource)
+  Dim strType
+  
+  Select Case True
+    Case strResourceType = ""
+      strType       = "RESOURCE"
+    Case Else 
+      strType       = strResourceType
+  End Select
+
+  strCmd            = "CLUSTER """ & strClusterName & """ " & strType & " """ & strResource & """ /ON"
   Call Util_RunExec(strCmd, "", strResponseYes, "5023")
   If intErrSave = 5023 Then
     WScript.Sleep strWaitLong
@@ -745,8 +841,20 @@ Sub AddChildNode(strProcess, strResourceName)
   Call FBManageCluster.AddChildNode(strProcess, strResourceName)
 End Sub
 
-Sub MoveGroup(strClusterGroup, strNode)
-  Call FBManageCluster.MoveGroup(strClusterGroup, strNode)
+Function GetAddress(strAddress, strFormat, strPreserve)
+  GetAddress = FBManageCluster.GetAddress(strAddress, strFormat, strPreserve)
+End Function
+
+Function GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
+  GetClusterIPAddresses = FBManageCluster.GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
+End Function
+
+Function GetPrimaryNode(objResource)
+  GetPrimaryNode    = FBManageCluster.GetPrimaryNode(objResource)
+End Function
+
+Sub MoveToGroup(strClusterGroup, strNode)
+  Call FBManageCluster.MoveToGroup(strClusterGroup, strNode)
 End Sub
 
 Sub RemoveOwner(strNetworkName)
@@ -757,16 +865,12 @@ Sub SetOwnerNode(strCluster)
   Call FBManageCluster.SetOwnerNode(strCluster)
 End Sub
 
-Function GetAddress(strAddress, strFormat, strPreserve)
-  GetAddress = FBManageCluster.GetAddress(strAddress, strFormat, strPreserve)
-End Function
+Sub SetResourceOff(strResource, strResourceType)
+  Call FBManageCluster.SetResourceOff(strResource, strResourceType)
+End Sub
 
-Function GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
-  GetClusterIPAddresses = FBManageCluster.GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
-End Function
-
-Sub SetResourceOn(strResource)
-  Call FBManageCluster.SetResourceOn(strResource)
+Sub SetResourceOn(strResource, strResourceType)
+  Call FBManageCluster.SetResourceOn(strResource, strResourceType)
 End Sub
 
 Sub SetVolumeDependency(strResourceName, strVolParam)

@@ -397,7 +397,7 @@ BEGIN;
   RETURN(@@ERROR);
 
 END;
-
+GO
 -- Create table for System Data Copy Job Exceptions
 
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[FB_AGSystemDataJobExceptions]') AND type in (N'U'))
@@ -413,15 +413,45 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_FB_AGSystemDataJobExceptions] ON [dbo].[FB_
 ,[JobName] ASC);
 
 -- Create default exceptions (Assumes /SetupGenMaint:Yes)
+DECLARE
+ @SQLText nvarchar(2000);
 
-INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
-SELECT name, 'DBA: Create New Errorlog' FROM master.sys.availability_groups;
-INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
-SELECT name, 'DBA: Integrity Check - System Databases' FROM master.sys.availability_groups;
-INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
-SELECT name, 'DBA: Integrity Check - User Databases' FROM master.sys.availability_groups;
-INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName)
-SELECT name, 'DBA: Move Cluster Core' FROM master.sys.availability_groups;
+SELECT 
+ @SQLText = 'INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName) '
+,@SQLText = @SQLText + 'SELECT DISTINCT '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'CASE WHEN a.is_distributed = 1 THEN r.replica_server_name ELSE a.name END ' ELSE 'a.name' END
+,@SQLText = @SQLText + ',''DBA: Create New Errorlog'' '
+,@SQLText = @SQLText + 'FROM master.sys.availability_groups AS a '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'JOIN master.sys.availability_replicas AS r ON r.group_id = a.group_id' ELSE '' END
+FROM master.sys.databases WHERE database_id = 1;
+EXECUTE sp_executeSQL @SQLText;
+SELECT 
+ @SQLText = 'INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName) '
+,@SQLText = @SQLText + 'SELECT DISTINCT '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'CASE WHEN a.is_distributed = 1 THEN r.replica_server_name ELSE a.name END ' ELSE 'a.name' END
+,@SQLText = @SQLText + ',''DBA: Integrity Check - System Databases'' '
+,@SQLText = @SQLText + 'FROM master.sys.availability_groups AS a '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'JOIN master.sys.availability_replicas AS r ON r.group_id = a.group_id' ELSE '' END
+FROM master.sys.databases WHERE database_id = 1;
+EXECUTE sp_executeSQL @SQLText;
+SELECT 
+ @SQLText = 'INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName) '
+,@SQLText = @SQLText + 'SELECT DISTINCT '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'CASE WHEN a.is_distributed = 1 THEN r.replica_server_name ELSE a.name END ' ELSE 'a.name' END
+,@SQLText = @SQLText + ',''DBA: Integrity Check - User Databases'' '
+,@SQLText = @SQLText + 'FROM master.sys.availability_groups AS a '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'JOIN master.sys.availability_replicas AS r ON r.group_id = a.group_id' ELSE '' END
+FROM master.sys.databases WHERE database_id = 1;
+EXECUTE sp_executeSQL @SQLText;
+SELECT 
+ @SQLText = 'INSERT INTO [dbo].[FB_AGSystemDataJobExceptions] (AGName, JobName) '
+,@SQLText = @SQLText + 'SELECT DISTINCT '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'CASE WHEN a.is_distributed = 1 THEN r.replica_server_name ELSE a.name END ' ELSE 'a.name' END
+,@SQLText = @SQLText + ',''DBA: Move Cluster Core'' '
+,@SQLText = @SQLText + 'FROM master.sys.availability_groups AS a '
+,@SQLText = @SQLText + CASE WHEN compatibility_level >= 130 THEN 'JOIN master.sys.availability_replicas AS r ON r.group_id = a.group_id' ELSE '' END
+FROM master.sys.databases WHERE database_id = 1;
+EXECUTE sp_executeSQL @SQLText;
 
 -- Create database roles
 

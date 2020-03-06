@@ -180,10 +180,10 @@ Private Sub SetRSURL(strApplication, strDirectory)
   End Select
 
   Select Case True
-    Case strRSAlias = ""
-      ' Nothing
-    Case Else
+    Case strRSAlias <> ""
       Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strRSAlias)
+    Case strSetupSQLRSCluster = "YES"
+      Call SetRSURLItem(strFunction, objRSInParam, strURLVar, GetBuildfileValue("ClusterGroupRS"))
   End Select
 
   Call SetRSURLItem(strFunction, objRSInParam, strURLVar, GetBuildfileValue("AuditServer"))
