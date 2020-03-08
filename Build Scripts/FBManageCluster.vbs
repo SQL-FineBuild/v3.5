@@ -58,9 +58,9 @@ Private Sub Class_Initialize
   objWMIReg.GetStringValue strHKLM,"Cluster\","ClusterName",strClusterName
   If strClusterName > "" Then
     strClusterHost  = "YES"
+    Call OpenCluster()
   End If
   Call SetBuildfileValue("ClusterHost", strClusterHost)
-  Call OpenCluster()
 
 End Sub
 
@@ -120,6 +120,38 @@ Sub AddChildNode(strProcess, strResourceName)
 End Sub
 
 
+Function GetClusterGroups()
+  Call DebugLog("GetClusterGroups:")
+
+  Set GetClusterGroups = objCluster.ResourceGroups
+
+End Function
+
+
+Function GetClusterNetworks()
+  Call DebugLog("GetClusterNetworks:")
+
+  Set GetClusterNetworks = objCluster.Networks
+
+End Function
+
+
+Function GetClusterNodes()
+  Call DebugLog("GetClusterNodes:")
+
+  Set GetClusterNodes  = objCluster.Nodes
+
+End Function
+
+
+Function GetClusterResources()
+  Call DebugLog("GetClusterResources:")
+
+  Set GetClusterResources = objCluster.Resources
+
+End Function
+
+
 Function GetPrimaryNode(strGroup)
   Call DebugLog("GetPrimaryNode: " & strGroup)
   Dim colClusGroups, colClusResources, colOwnerNodes
@@ -127,7 +159,7 @@ Function GetPrimaryNode(strGroup)
   Dim strPrimaryNode, strOwnerNode
 
   strPrimaryNode    = ""
-  Set colClusGroups = objCluster.ResourceGroups
+  Set colClusGroups = GetClusterGroups()
   For Each objClusGroup In colClusGroups
     If objClusGroup.Name = strGroup Then
       strOwnerNode         = objClusGroup.OwnerNode.Name
@@ -728,8 +760,7 @@ Private Function MoveClusterCSV(strClusterGroup, strVolParam)
       Case Else
         strDebugMsg1            = "Moving " & strVolRes & " to " & strClusterGroup
         strFailoverClusterDisks = strFailoverClusterDisks & """" & strVolRes & """ "
-        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strVolRes & """ /ON"
-        Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        Call SetResourceOn(strVolRes, strResourceType)
     End Select
   Next
 
@@ -803,9 +834,11 @@ Sub SetResourceOn(strResource, strResourceType)
   End Select
 
   strCmd            = "CLUSTER """ & strClusterName & """ " & strType & " """ & strResource & """ /ON"
-  Call Util_RunExec(strCmd, "", strResponseYes, "5023")
-  If intErrSave = 5023 Then
-    WScript.Sleep strWaitLong
+  Call Util_RunExec(strCmd, "", strResponseYes, -1)
+  If intErrSave <> 0 Then
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
     Call Util_RunExec(strCmd, "", strResponseYes, 0)
   End If
 
@@ -845,8 +878,24 @@ Function GetAddress(strAddress, strFormat, strPreserve)
   GetAddress = FBManageCluster.GetAddress(strAddress, strFormat, strPreserve)
 End Function
 
+Function GetClusterGroups()
+  Set GetClusterGroups  = FBManageCluster.GetClusterGroups()
+End Function
+
 Function GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
   GetClusterIPAddresses = FBManageCluster.GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
+End Function
+
+Function GetClusterNetworks()
+  Set GetClusterNetworks = FBManageCluster.GetClusterNetworks()
+End Function
+
+Function GetClusterNodes()
+  Set GetClusterNodes    = FBManageCluster.GetClusterNodes()
+End Function
+
+Function GetClusterResources()
+  Set GetClusterResources = FBManageCluster.GetClusterResources()
 End Function
 
 Function GetPrimaryNode(objResource)

@@ -477,7 +477,7 @@ Sub RunCacls(strCmd)
     strShareDrive   = GetShareDrive(strCmd)
   End If
 
-  Call Util_RunExec(strProgCacls & " " & strCmd, "EOF", strResponseYes, -1)
+  Call Util_RunExec(strProgCacls & " " & strCmd, "", strResponseYes, -1)
   Select Case True
     Case intErrSave = 0
       ' Nothing
