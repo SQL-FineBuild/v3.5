@@ -163,16 +163,16 @@ Function GetPrimaryNode(strGroup)
   For Each objClusGroup In colClusGroups
     If objClusGroup.Name = strGroup Then
       strOwnerNode         = objClusGroup.OwnerNode.Name
-      Set colClusResources = objClusGroup.CommonProperties.ResourceGroups
+      Set colClusResources = objClusGroup.Resources
       For Each objClusResource In colClusResources
         Set colOwnerNodes = objClusResource.PossibleOwnerNodes
         For Each objOwnerNode In colOwnerNodes
           Select Case True
-            Case strOwnerNode = objOwnerNode.CommonProperties.NodeName
+            Case strOwnerNode = objOwnerNode.Name
               strPrimaryNode  = strOwnerNode
               Exit For
             Case Else
-              strPrimaryNode  = objOwnerNode.CommonProperties.NodeName
+              strPrimaryNode  = objOwnerNode.Name
           End Select
         Next
         Exit For
