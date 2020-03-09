@@ -15,11 +15,10 @@
 '
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Option Explicit
-Dim objCluster
 Dim FBManageCluster: Set FBManageCluster = New FBManageClusterClass
 
 Class FBManageClusterClass
-  Dim objShell, objRE, objWMI, objWMIDNS, objWMIReg
+  Dim objCluster, objShell, objRE, objWMI, objWMIDNS, objWMIReg
   Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network, strClusStorage, strClusterHost, strClusterName, strCmd, strCSVRoot
   Dim strFailoverClusterDisks, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
   Dim intIndex
@@ -124,6 +123,14 @@ Function GetClusterGroups()
   Call DebugLog("GetClusterGroups:")
 
   Set GetClusterGroups = objCluster.ResourceGroups
+
+End Function
+
+
+Function GetClusterInterfaces()
+  Call DebugLog("GetClusterInterfaces:")
+
+  Set GetClusterInterfaces = objCluster.NetInterfaces
 
 End Function
 
@@ -760,7 +767,7 @@ Private Function MoveClusterCSV(strClusterGroup, strVolParam)
       Case Else
         strDebugMsg1            = "Moving " & strVolRes & " to " & strClusterGroup
         strFailoverClusterDisks = strFailoverClusterDisks & """" & strVolRes & """ "
-        Call SetResourceOn(strVolRes, strResourceType)
+        Call SetResourceOn(strVolRes, "")
     End Select
   Next
 
@@ -884,6 +891,10 @@ End Function
 
 Function GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
   GetClusterIPAddresses = FBManageCluster.GetClusterIPAddresses(strClusterGroup, strClusterType, strAddressFormat)
+End Function
+
+Function GetClusterInterfaces()
+  Set GetClusterInterfaces = FBManageCluster.GetClusterInterfaces()
 End Function
 
 Function GetClusterNetworks()

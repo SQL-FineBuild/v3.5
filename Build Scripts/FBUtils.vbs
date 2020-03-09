@@ -633,7 +633,7 @@ Sub SetParam(strParamName, strParam, strNewValue, strMessage, ByRef strList)
       strParam      = strNewValue
     Case strMessage <> ""
       strParam      = strNewValue
-      Call SetBuildMessage(strMsgInfo, Left(strParamName & Space(24), Max(Len(strParamName), 24)) & " set to " & strNewValue & ": " & strMessage)
+      Call SetBuildMessage(strMsgInfo, Left("/" & strParamName & ":" & Space(24), Max(Len(strParamName) + 2, 24)) & " set to " & strNewValue & ": " & strMessage)
     Case strList <> ""
       strParam      = strNewValue
       strList       = strList & " " & strParamName
