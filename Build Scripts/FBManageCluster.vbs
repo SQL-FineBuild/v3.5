@@ -194,7 +194,7 @@ End Function
 
 
 Sub MoveToGroup(strClusterGroup, strNode)
-  Call DebugLog("MoveToGroup:" & strClusterGroup)
+  Call DebugLog("MoveToGroup: " & strClusterGroup)
   Dim strNewNode
 
   Select Case True
@@ -229,8 +229,9 @@ Private Sub OpenCluster()
       Wscript.Sleep strWaitLong
       objCluster.Open ""
   End Select
-
   intErrSave        = err.Number
+
+  Wscript.Sleep strWaitShort
   Select Case True
     Case IsNull(objCluster)
       ' Nothing
@@ -238,7 +239,6 @@ Private Sub OpenCluster()
       strClusterName = UCase(objCluster.Name)
   End Select
   Call SetBuildfileValue("ClusterName", strClusterName)
-  Wscript.Sleep strWaitShort
 
 End Sub
 
@@ -254,7 +254,7 @@ End Sub
 
 
 Sub SetOwnerNode(strClusterGroup)
-  Call DebugLog("SetOwnerNode:" & strClusterGroup)
+  Call DebugLog("SetOwnerNode: " & strClusterGroup)
 
   If strPreferredOwner = strServer Then
     strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /SETOWNERS:""" & strServer & """ "
@@ -293,7 +293,7 @@ End Sub
 
 
 Private Sub SetupClusterService(strClusterGroup, strResourceName, strServiceName, strServiceType, strServiceDesc, strServiceCheck)
-  Call DebugLog("SetupClusterService:" & strResourceName & ", " & strServiceName)
+  Call DebugLog("SetupClusterService: " & strResourceName & ", " & strServiceName)
 
   If strServiceType <> "" Then
     strCmd          = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /CREATE /GROUP:""" & strClusterGroup & """ "
@@ -428,6 +428,8 @@ Function GetAddress(strAddress, strFormat, strPreserve)
     strUserDNSServer  = GetBuildfileValue("UserDNSServer")
     strOSVersion      = GetBuildfileValue("OSVersion")
     strWaitLong       = GetBuildfileValue("WaitLong")
+    strDebugMsg1      = "DNS Server: " & strUserDNSServer
+    Set objWMIDNS     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\" & strUserDNSServer & "\root\MicrosoftDNS")
   End If
 
   objRE.Pattern     = "^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
@@ -442,17 +444,9 @@ Function GetAddress(strAddress, strFormat, strPreserve)
 
   Select Case True
     Case strOSVersion < "6.0"
-      strRetAddress =  GetAddressPing(strAddress, strAddrType, strFormat)
+      strRetAddress =  GetAddressPing(strAddress,  strAddrType, strFormat)
    Case Else
       strRetAddress =  GetAddressWin32(strAddress, strAddrType, strFormat)
-  End Select
-
-  Select Case True
-    Case strUserDNSServer = ""
-      ' Nothing
-    Case objWMIDNS Is Nothing
-      strDebugMsg1  = "DNS Server: " & strUserDNSServer
-      Set objWMIDNS = GetObject("winmgmts:{impersonationLevel=impersonate}!\\" & strUserDNSServer & "\root\MicrosoftDNS")
   End Select
 
   Select Case True
@@ -482,7 +476,7 @@ Function GetAddress(strAddress, strFormat, strPreserve)
 
   Call DebugLog("Address found: """ & strRetAddress & """")
   Select Case True
-    Case strRetAddress <> ""
+    Case strRetAddress = ""
       ' Nothing
     Case strPreserve = "Y"
       strRetAddress = strAddress
@@ -517,12 +511,12 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
   Dim arrReadAll
   Dim colAddrs
   Dim intLines, intAddrPos
-  Dim objExec
   Dim strReadAll, strReadLine, strRetAddress
 
-  strCmd            = "PING -a -n 1 " & strAddress
-  Set objExec       = objShell.Exec(strCmd)
-  strReadAll        = Replace(objExec.StdOut.ReadAll, vbLf, "")
+  strReadAll        = ExecPing("PING -a -n 1 -4 " & strAddress)
+  If Instr(strReadAll, "[") = 0 Then
+    strReadAll      = ExecPing("PING -a -n 1 " & strAddress)
+  End If
   arrReadAll        = Filter(Split(strReadAll, vbCr), " ")
   intLines          = UBound(arrReadAll)
   Call DebugLog("PING output:" & Cstr(intLines) & ">" & Join(arrReadAll, "< >") & "<")
@@ -541,7 +535,7 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
     Case UCase(strFormat) = "ALIAS"
       strRetAddress = Mid(strReadLine,  intAddrPos + 1)
       strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
-    Case (strAddrType = "Server") And (intAddrPos > 0)
+    Case strAddrType = "Server"
       strRetAddress = Mid(strReadLine,  intAddrPos + 1)
       strRetAddress = Left(strRetAddress, Instr(strRetAddress, "]") - 1)
     Case Else
@@ -553,6 +547,16 @@ Private Function GetAddressPing(strAddress, strAddrType, strFormat)
   End Select
 
   GetAddressPing    = strRetAddress
+
+End Function
+
+
+Function ExecPing(strCmd)
+  Call DebugLog("ExecPing: " & strCmd)
+  Dim objExec
+
+  Set objExec       = objShell.Exec(strCmd)
+  ExecPing          = Replace(objExec.StdOut.ReadAll, vbLf, "")
 
 End Function
 
@@ -620,12 +624,12 @@ Private Function GetNextAddress(strClusterName, strClusType, strIPType, strAddrT
       Case strIPType = "IPv4"
         intIP       = CStr(CInt(intIP) + 1)
         If intIP > 255 Then
-          Call SetBuildMessage(strMsgError, "IP Address exceeds maximum:" & intIP)
+          Call SetBuildMessage(strMsgError, "IP Address exceeds maximum: " & intIP)
         End If
       Case Else
         intIP       = Hex(CLng("&h" & intIP) + 1)
         If intIP > "FFFF" Then
-          Call SetBuildMessage(strMsgError, "IP Address exceeds maximum:" & intIP)
+          Call SetBuildMessage(strMsgError, "IP Address exceeds maximum: " & intIP)
         End If
     End Select
     strClusIPAddr   = strBaseIPAddr & intIP
@@ -842,12 +846,18 @@ Sub SetResourceOn(strResource, strResourceType)
 
   strCmd            = "CLUSTER """ & strClusterName & """ " & strType & " """ & strResource & """ /ON"
   Call Util_RunExec(strCmd, "", strResponseYes, -1)
-  If intErrSave <> 0 Then
-    Wscript.Sleep strWaitLong
-    Wscript.Sleep strWaitLong
-    Wscript.Sleep strWaitLong
-    Call Util_RunExec(strCmd, "", strResponseYes, 0)
-  End If
+  Select Case True
+    Case intErrSave = 0
+      ' Nothing
+    Case intErrSave = 5063
+      ' Nothing
+    Case Else
+      Call DebugLog("Retrying due to code " & CStr(intErrSave))
+      Wscript.Sleep strWaitLong
+      Wscript.Sleep strWaitLong
+      Wscript.Sleep strWaitLong
+      Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  End Select
 
 End Sub
 

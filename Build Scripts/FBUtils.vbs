@@ -505,7 +505,7 @@ End Sub
 
 Private Function GetShareDrive(strCmd)
   Call DebugLog("GetShareDrive:")
-  Dim intIdx, intIdx2, intIdx3
+  Dim intIdx, intIdx1, intIdx2, intIdx3, intIdx4
   Dim strAlphabet, strDriveList, strShare, strShareDrive
 
   strAlphabet       = GetBuildfileValue("Alphabet")
@@ -520,11 +520,13 @@ Private Function GetShareDrive(strCmd)
 
   If strShareDrive <> "" Then
     intIdx          = Instr(strCmd, "\\")
-    intIdx2         = Instr(intIdx  + 2, strCmd, "\")
-    intIdx3         = Instr(intIdx2 + 1, strCmd, """")
-    strShare        = Mid(strCmd, intIdx, (intIdx3 - intIdx1) - intIdx)
+    intIdx1         = Instr(intIdx  + 2, strCmd, "\")
+    intIdx2         = Instr(intIdx1 + 1, strCmd, "\")
+    intIdx3         = Instr(intIdx1 + 1, strCmd, """")
+    intIdx4         = Min(intIdx2, intIdx3)
+    strShare        = Mid(strCmd, intIdx, intIdx4 - intIdx)
     Call Util_RunExec("NET USE " & strShareDrive & " """ & strShare & """ /PERSISTENT:NO", "EOF", "", 0)
-    strCmd          = Left(strCmd, intIdx - 1) & strShareDrive & Mid(strCmd, intIdx3)
+    strCmd          = Left(strCmd, intIdx - 1) & strShareDrive & Mid(strCmd, intIdx4)
     Wscript.Sleep strWaitShort
   End If
 
