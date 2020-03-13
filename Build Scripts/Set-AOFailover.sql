@@ -43,6 +43,7 @@ AS
 -- Date        Name  Comment
 -- 12/11/2019  EdV   Initial code
 -- 28/01/2020  EdV   Initial FineBuild Version
+-- 12/03/2020  EdV   Fixed bug for Distributed Availability Groups
 --
 BEGIN;
 
@@ -54,27 +55,27 @@ BEGIN;
   VALUES(@AGName,@TargetServer);
 
   INSERT INTO @AGServers (AGName, AGType, AvailabilityMode, RequiredCommit, PrimaryServer, SecondaryServer, Endpoint, ServerId)
-  SELECT
-   ag.name
-  ,CASE WHEN ag.is_distributed = 1 THEN 'D' WHEN ag.basic_features = 1 THEN 'B' WHEN ag.cluster_type_desc = 'none' THEN 'N' ELSE 'C' END AS AGType
-  ,ars.availability_mode
-  ,ISNULL(ag.required_synchronized_secondaries_to_commit, 0)
-  ,arp.replica_server_name AS PrimaryServer
-  ,ars.replica_server_name AS SecondaryServer
-  ,SUBSTRING(ISNULL(ars.endpoint_url, arp.endpoint_url), 7, CHARINDEX('.', ISNULL(ars.endpoint_url, arp.endpoint_url)) - 7) AS EndpointServer
-  ,ROW_NUMBER() OVER(PARTITION BY AGName ORDER BY ars.replica_server_name)
-  FROM @Parameters p
-  JOIN [sys].[availability_groups] ag ON ag.name LIKE p.AGName
-  JOIN [sys].[availability_replicas] arp ON arp.group_id = ag.group_id
-  JOIN [sys].[dm_hadr_availability_replica_states] arps ON arps.group_id = arp.group_id AND arps.replica_id = arp.replica_id AND arps.role = 1
-  JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
-  JOIN [sys].[dm_hadr_availability_replica_states] arss ON arss.group_id = ars.group_id AND arss.replica_id = ars.replica_id AND arss.role <> 1
-  
+  SELECT *,ROW_NUMBER() OVER(PARTITION BY AGName ORDER BY SecondaryServer) AS ServerId
+  FROM (SELECT
+     ag.name AS AGName
+    ,CASE WHEN ag.is_distributed = 1 THEN 'D' WHEN ag.basic_features = 1 THEN 'B' WHEN ag.cluster_type_desc = 'none' THEN 'N' ELSE 'C' END AS AGType
+    ,ars.availability_mode
+    ,ISNULL(ag.required_synchronized_secondaries_to_commit, 0) AS RequiredCommit
+    ,CASE WHEN ag.is_distributed = 1 AND arps.replica_id IS NULL THEN arp.replica_server_name WHEN ag.is_distributed <> 1 AND arps.role = 1 THEN arp.replica_server_name END AS PrimaryServer
+    ,CASE WHEN ag.is_distributed = 1 AND arss.role = 2           THEN ars.replica_server_name WHEN ag.is_distributed <> 1 AND arss.role = 2 THEN ars.replica_server_name END AS SecondaryServer
+    ,SUBSTRING(ISNULL(ars.endpoint_url, arp.endpoint_url), 7, CHARINDEX('.', ISNULL(ars.endpoint_url, arp.endpoint_url)) - 7) AS EndpointServer
+    FROM @Parameters p
+    JOIN [sys].[availability_groups] ag ON ag.name LIKE p.AGName
+    JOIN [sys].[availability_replicas] arp ON arp.group_id = ag.group_id
+    LEFT JOIN [sys].[dm_hadr_availability_replica_states] arps ON arps.group_id = arp.group_id AND arps.replica_id = arp.replica_id
+    JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
+    LEFT JOIN [sys].[dm_hadr_availability_replica_states] arss ON arss.group_id = ars.group_id AND arss.replica_id = ars.replica_id) AS ag
+  WHERE PrimaryServer IS NOT NULL AND SecondaryServer IS NOT NULL;
 
   UPDATE @AGServers SET
    TargetServer = 'Y'
   FROM @Parameters p
-  WHERE ServerId = (SELECT MAX(ServerId) FROM @AGServers WHERE (ServerId = 1) OR (p.TargetServer = Endpoint) GROUP BY AGName);
+  WHERE ServerId IN (SELECT MAX(ServerId) FROM @AGServers WHERE (ServerId = 1) OR (p.TargetServer = Endpoint) GROUP BY AGName);
 
   RETURN;
 
@@ -549,6 +550,8 @@ EXEC msdb.dbo.sp_add_jobschedule
 EXEC msdb.dbo.sp_add_jobserver
  @job_id = @jobId
 ,@server_name = N'(local)';
+
+WAITFOR DELAY '00:00:02' -- Give SQL Agent time to catch up
 
 -- Process Alerts to trigger 'DBA: AG State Change' Job
 

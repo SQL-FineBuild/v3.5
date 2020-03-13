@@ -35,6 +35,7 @@ AS
 -- Date        Name  Comment
 -- 30/05/2019  EdV   Initial code
 -- 24/01/2020  EdV   First FineBuild Version
+-- 12/03/2020  EdV   Miscellaneous fixes
 --
 BEGIN;
   SET NOCOUNT ON;
@@ -68,11 +69,22 @@ BEGIN;
    AGName           = REPLACE(REPLACE(AGName, '[',''),']','')
   FROM @Parameters p;
 
-  DROP TABLE IF EXISTS #AGServers;
-  SELECT *
-  INTO #AGServers
+  DECLARE @AGServers  TABLE
+  (AGName           NVARCHAR(128)
+  ,AGType           CHAR(1)
+  ,AvailabilityMode INT
+  ,RequiredCommit   INT
+  ,PrimaryServer    NVARCHAR(128)
+  ,SecondaryServer  NVARCHAR(128)
+  ,Endpoint         NVARCHAR(128)
+  ,ServerId         INT
+  ,TargetServer     CHAR(1));
+
+  INSERT INTO @AGServers
+  (AGName,AGType,AvailabilityMode,RequiredCommit,PrimaryServer,SecondaryServer,Endpoint,ServerId,TargetServer)
+  SELECT AGName,AGType,AvailabilityMode,RequiredCommit,PrimaryServer,SecondaryServer,Endpoint,ServerId,TargetServer
   FROM dbo.FB_GetAGServers((SELECT AGName FROM @Parameters), '');
-  IF (SELECT ExecProcess FROM @Parameters) <> 'Y' SELECT * FROM #AGServers;
+  IF (SELECT ExecProcess FROM @Parameters) <> 'Y' SELECT * FROM @AGServers;
   
   IF (SELECT RemoteCall FROM @Parameters) <> 'Y' -- Main Control Process
   BEGIN;
@@ -80,7 +92,7 @@ BEGIN;
     DECLARE AGNames CURSOR FAST_FORWARD FOR
     SELECT
      AGName, PrimaryServer, SecondaryServer
-    FROM #AGServers s
+    FROM @AGServers s
     WHERE TargetServer = 'Y'
     ORDER BY s.AGName;
 
@@ -89,10 +101,10 @@ BEGIN;
     WHILE @@FETCH_STATUS = 0  
     BEGIN;
       SELECT          
-       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + @PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + @AGWork + ''', @TargetServer=''' + @SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''M'' '
+       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + @PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + @AGWork + ''', @TargetServer=''' + @SecondaryServer + ''', @RemoteCall=''Y'', @Execute=''' +p.ExecProcess + ''', @Operation = ''M'' '
       FROM @Parameters p
       PRINT @SQLText;
-      IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
+      EXECUTE sp_executeSQL @SQLText;
       FETCH NEXT FROM AGNames INTO @AGWork, @PrimaryServer, @SecondaryServer;
     END;
     CLOSE AGNames;
@@ -107,8 +119,7 @@ BEGIN;
 
   END;
 
-
-  -- Start of Utility Functions called from the Main Control Process
+  -- Start of Main Control Process
 
   IF (SELECT Operation FROM @Parameters) = 'M' -- Main Control Loop
   BEGIN; 
@@ -119,12 +130,12 @@ BEGIN;
     SELECT
      @SQLText     = @SQLText + p.CRLF + 'Current Primary Server: '   + a.PrimaryServer
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName
+    JOIN @AGServers a ON a.AGName = p.AGName
     WHERE a.TargetServer = 'Y';
     SELECT
      @SQLText     = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.SecondaryServer
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName
+    JOIN @AGServers a ON a.AGName = p.AGName
     WHERE a.TargetServer = 'Y';
     SELECT
      @SQLText     = @SQLText + p.CRLF + REPLICATE('*', 40)
@@ -140,7 +151,7 @@ BEGIN;
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + a.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''C'', @Message = @Message OUTPUT '
       FROM @Parameters p
-      JOIN #AGServers a ON a.AGName = p.AGName;
+      JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
@@ -153,7 +164,7 @@ BEGIN;
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''S'', @Message = @Message OUTPUT '
       FROM @Parameters p
-      JOIN #AGServers a ON a.AGName = p.AGName;
+      JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
@@ -166,7 +177,7 @@ BEGIN;
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.PrimaryServer + ''', @RemoteCall=''Y'', @Operation = ''J'', @Message = @Message OUTPUT '
       FROM @Parameters p
-      JOIN #AGServers a ON a.AGName = p.AGName;
+      JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
@@ -179,7 +190,7 @@ BEGIN;
       SELECT          
        @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''E'', @Message = @Message OUTPUT '
       FROM @Parameters p
-      JOIN #AGServers a ON a.AGName = p.AGName;
+      JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
@@ -202,7 +213,7 @@ BEGIN;
      @Message       = 'Starting Credentials'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaCredential       -Source "' +  a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
 --  IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -210,7 +221,7 @@ BEGIN;
      @Message       = 'Starting Logins'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaLogin            -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -219,7 +230,7 @@ BEGIN;
      @Message         = 'Starting Linked Server'
     ,@SQLText         = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaLinkedServer     -Source "' +  a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
 --  IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -227,7 +238,7 @@ BEGIN;
      @Message       = 'Starting Job Category'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaAgentJobCategory -Source "' +  a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -235,7 +246,7 @@ BEGIN;
      @Message       = 'Starting Job Operator'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaAgentOperator    -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -243,7 +254,7 @@ BEGIN;
      @Message       = 'Starting Job Alerts'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaAgentAlert       -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -251,7 +262,7 @@ BEGIN;
      @Message       = 'Starting Job Proxies'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaAgentProxy       -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -259,7 +270,7 @@ BEGIN;
      @Message       = 'Starting Job Schedule'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaAgentSchedule    -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -267,7 +278,7 @@ BEGIN;
      @Message       = 'Starting Mail Profile'
     ,@SQLText      = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaDbMail           -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -275,7 +286,7 @@ BEGIN;
      @Message       = 'Starting sp_configure options'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaSpConfigure      -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '"'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -283,7 +294,7 @@ BEGIN;
      @Message       = 'Starting System DB User Objects'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaSysDbUserObject  -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Classic'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -291,7 +302,7 @@ BEGIN;
      @Message       = 'Starting Job Definitions'
     ,@SQLText       = 'xp_cmdshell ''MODE CON COLS=120 && POWERSHELL Copy-DbaAgentJob         -Source "' + a.PrimaryServer + '" -Destination "' + p.TargetServer + '" -Force -DisableOnDestination'''
     FROM @Parameters p
-    JOIN #AGServers a ON a.AGName = p.AGName;
+    JOIN @AGServers a ON a.AGName = p.AGName;
     PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
 
@@ -353,7 +364,7 @@ BEGIN;
       SELECT 
       @SQLText     = 'IF EXISTS(SELECT 1 FROM [' + a.PrimaryServer + '].msdb.dbo.sysjobs WHERE name = ''' + @JobName + ''' AND enabled = 1) EXECUTE msdb.dbo.sp_update_job @job_name=''' + @JobName + ''',@enabled=1;'
       FROM @Parameters p
-      JOIN #AGServers a ON a.AGName = p.AGName;
+      JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
       IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
       FETCH NEXT FROM Job_Names INTO @JobName;
@@ -380,7 +391,8 @@ BEGIN;
     JOIN msdb.dbo.sysjobschedules js ON js.schedule_id = s.schedule_id
     JOIN msdb.dbo.sysjobs j ON j.job_id = js.job_id
     JOIN master.dbo.FB_AGSystemDataJobExceptions e ON e.JobName = j.name
-    CROSS JOIN @Parameters p
+	JOIN @AGServers a ON a.SecondaryServer = e.AGName
+    JOIN @Parameters p ON p.AGName = a.AGName
     ORDER BY j.name,s.schedule_id;
     PRINT @SQLText;
     IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText;
@@ -398,6 +410,7 @@ BEGIN;
 
 END;
 GO
+
 -- Create table for System Data Copy Job Exceptions
 
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[FB_AGSystemDataJobExceptions]') AND type in (N'U'))
