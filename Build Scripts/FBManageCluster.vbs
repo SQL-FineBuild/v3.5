@@ -163,28 +163,34 @@ Function GetPrimaryNode(strGroup)
   Call DebugLog("GetPrimaryNode: " & strGroup)
   Dim colClusGroups, colClusResources, colOwnerNodes
   Dim objClusGroup, objClusResource, objOwnerNode
-  Dim strPrimaryNode, strOwnerNode
+  Dim strPrimaryNode, strTypeList
 
   strPrimaryNode    = ""
+  strTypeList       = "'SQL Server Agent' 'Generic Service' 'SQL Server' 'Distributed Transaction Coordinator' 'SQL Server Availability Group'"
   Set colClusGroups = GetClusterGroups()
   For Each objClusGroup In colClusGroups
     If objClusGroup.Name = strGroup Then
-      strOwnerNode         = objClusGroup.OwnerNode.Name
       Set colClusResources = objClusGroup.Resources
       For Each objClusResource In colClusResources
         Set colOwnerNodes = objClusResource.PossibleOwnerNodes
         For Each objOwnerNode In colOwnerNodes
           Select Case True
-            Case strOwnerNode = objOwnerNode.Name
-              strPrimaryNode  = strOwnerNode
-              Exit For
+            Case InStr(strTypeList, "'" & objClusResource.TypeName & "'") = 0
+              ' Nothing
+            Case objOwnerNode.State <> 0
+              ' Nothing
             Case Else
-              strPrimaryNode  = objOwnerNode.Name
+              strPrimaryNode  = UCase(objOwnerNode.Name)
+              Exit For
           End Select
         Next
-        Exit For
+        If strPrimaryNode <> "" Then
+          Exit For
+        End If
       Next
-      Exit For
+      If strPrimaryNode <> "" Then
+        Exit For
+      End If
     End If
   Next
 
