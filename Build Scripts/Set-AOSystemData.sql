@@ -73,35 +73,34 @@ BEGIN;
   (AGName           NVARCHAR(128)
   ,AGType           CHAR(1)
   ,AvailabilityMode INT
-  ,RequiredCommit   INT
   ,PrimaryServer    NVARCHAR(128)
   ,SecondaryServer  NVARCHAR(128)
-  ,Endpoint         NVARCHAR(128)
   ,ServerId         INT
   ,TargetServer     CHAR(1));
 
   INSERT INTO @AGServers
-  (AGName,AGType,AvailabilityMode,RequiredCommit,PrimaryServer,SecondaryServer,Endpoint,ServerId,TargetServer)
-  SELECT AGName,AGType,AvailabilityMode,RequiredCommit,PrimaryServer,SecondaryServer,Endpoint,ServerId,TargetServer
+  (AGName,AGType,AvailabilityMode,PrimaryServer,SecondaryServer,ServerId,TargetServer)
+  SELECT AGName,AGType,AvailabilityMode,PrimaryServer,SecondaryServer,ServerId,TargetServer
   FROM dbo.FB_GetAGServers((SELECT AGName FROM @Parameters), '');
-  IF (SELECT ExecProcess FROM @Parameters) <> 'Y' SELECT * FROM @AGServers;
   
   IF (SELECT RemoteCall FROM @Parameters) <> 'Y' -- Main Control Process
   BEGIN;
+
+    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' SELECT * FROM @AGServers;
 
     DECLARE AGNames CURSOR FAST_FORWARD FOR
     SELECT
      AGName, PrimaryServer, SecondaryServer
     FROM @AGServers s
     WHERE TargetServer = 'Y'
-    ORDER BY s.AGName;
+    ORDER BY s.AGName, s.SecondaryServer;
 
     OPEN AGNames;
     FETCH NEXT FROM AGNames INTO @AGWork, @PrimaryServer, @SecondaryServer;
     WHILE @@FETCH_STATUS = 0  
     BEGIN;
       SELECT          
-       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + @PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + @AGWork + ''', @TargetServer=''' + @SecondaryServer + ''', @RemoteCall=''Y'', @Execute=''' +p.ExecProcess + ''', @Operation = ''M'' '
+       @SQLText   = 'EXECUTE [' + @PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + @AGWork + ''', @Operation = ''M'', @TargetServer=''' + @SecondaryServer + ''', @RemoteCall=''Y'', @Execute=''' +p.ExecProcess + ''''
       FROM @Parameters p
       PRINT @SQLText;
       EXECUTE sp_executeSQL @SQLText;
@@ -125,15 +124,9 @@ BEGIN;
   BEGIN; 
  
     SELECT
-     @SQLText     = 'Copy System Data for : ' + p.AGName
-    FROM @Parameters p;
-    SELECT
-     @SQLText     = @SQLText + p.CRLF + 'Current Primary Server: '   + a.PrimaryServer
-    FROM @Parameters p
-    JOIN @AGServers a ON a.AGName = p.AGName
-    WHERE a.TargetServer = 'Y';
-    SELECT
-     @SQLText     = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.SecondaryServer
+     @SQLText     = 'Copy System Data on ' + @@SERVERNAME + ' for : ' + p.AGName
+    ,@SQLText     = @SQLText + p.CRLF + 'Current Primary Server: '   + a.PrimaryServer
+    ,@SQLText     = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.SecondaryServer
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName = p.AGName
     WHERE a.TargetServer = 'Y';
@@ -149,11 +142,11 @@ BEGIN;
        @Message   = 'Copy Critical Data'
       ,@SQLText   = '';
       SELECT          
-       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + a.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''C'', @Message = @Message OUTPUT '
+       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.PrimaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + a.AGName + ''', @Operation = ''C'', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Execute=''' + p.ExecProcess + ''', @Message = @Message OUTPUT'
       FROM @Parameters p
       JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
-      IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
+      IF @SQLText <> '' EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
 
     IF @Message = 'Completed'
@@ -162,11 +155,11 @@ BEGIN;
        @Message   = 'Job Schedule'
       ,@SQLText   = '';
       SELECT          
-       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''S'', @Message = @Message OUTPUT '
+       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @Operation = ''S'', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Execute=''' + p.ExecProcess + ''', @Message = @Message OUTPUT'
       FROM @Parameters p
       JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
-      IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
+      IF @SQLText <> '' EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
 
     IF @Message = 'Completed'
@@ -175,11 +168,11 @@ BEGIN;
        @Message   = 'Job Definitions'
       ,@SQLText   = '';
       SELECT          
-       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.PrimaryServer + ''', @RemoteCall=''Y'', @Operation = ''J'', @Message = @Message OUTPUT '
+       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + ']. master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @Operation = ''J'', @TargetServer=''' + a.PrimaryServer + ''', @RemoteCall=''Y'', @Execute=''' + p.ExecProcess + ''', @Message = @Message OUTPUT'
       FROM @Parameters p
       JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
-      IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
+      IF @SQLText <> '' EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
 
     IF @Message = 'Completed'
@@ -188,11 +181,11 @@ BEGIN;
        @Message   = 'Schedule Exceptions'
       ,@SQLText   = '';
       SELECT          
-       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Operation = ''E'', @Message = @Message OUTPUT '
+       @SQLText   = @SQLText + p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGSystemData @AGName=''' + p.AGName + ''', @Operation = ''E'', @TargetServer=''' + a.SecondaryServer + ''', @RemoteCall=''Y'', @Execute=''' + p.ExecProcess + ''', @Message = @Message OUTPUT'
       FROM @Parameters p
       JOIN @AGServers a ON a.AGName = p.AGName;
       PRINT @SQLText;
-      IF ((SELECT ExecProcess FROM @Parameters) = 'Y') AND (@SQLText <> '') EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
+      IF @SQLText <> '' EXECUTE sp_executeSQL @SQLText, @SQLParms, @Message=@Message OUTPUT;
     END;
 	
     SELECT
@@ -207,6 +200,10 @@ BEGIN;
 
   IF (SELECT Operation FROM @Parameters) = 'C' -- Copy Critical Data
   BEGIN; 
+
+    SELECT
+	 @Message       = 'Starting Critical Data copy on ' + @@SERVERNAME;
+	PRINT @Message;
 
     -- Requires Windows Local Admin access on source server to obtain passwords.  Do not give a Job account this access, instead run this manually on ad-hoc basis
     SELECT
@@ -317,6 +314,10 @@ BEGIN;
 
   IF (SELECT Operation FROM @Parameters) = 'S' -- Update Schedule data on Target System
   BEGIN; 
+
+   SELECT
+	 @Message       = 'Starting Schedule Data copy on ' + @@SERVERNAME;
+	PRINT @Message;
     
     DECLARE Job_Schedules CURSOR FAST_FORWARD FOR
     SELECT
@@ -349,12 +350,16 @@ BEGIN;
 
   IF (SELECT Operation FROM @Parameters) = 'J' -- Update Job data on Target System
   BEGIN; 
+
+   SELECT
+	 @Message       = 'Starting Job Data copy on ' + @@SERVERNAME;
+	PRINT @Message;
   
     DECLARE Job_Names CURSOR FAST_FORWARD FOR
     SELECT
      j.name
     FROM msdb.dbo.sysjobs j
-    WHERE enabled = 1
+    WHERE enabled = 0
     ORDER BY j.name;
 
     OPEN Job_Names;
@@ -362,9 +367,11 @@ BEGIN;
     WHILE @@FETCH_STATUS = 0  
     BEGIN;
       SELECT 
-      @SQLText     = 'IF EXISTS(SELECT 1 FROM [' + a.PrimaryServer + '].msdb.dbo.sysjobs WHERE name = ''' + @JobName + ''' AND enabled = 1) EXECUTE msdb.dbo.sp_update_job @job_name=''' + @JobName + ''',@enabled=1;'
+	   @Message     = 'Processing job ''' + @JobName + ''''
+      ,@SQLText     = 'IF EXISTS(SELECT 1 FROM [' + a.PrimaryServer + '].msdb.dbo.sysjobs WHERE name = ''' + @JobName + ''' AND enabled = 1) EXECUTE msdb.dbo.sp_update_job @job_name=''' + @JobName + ''',@enabled=1;'
       FROM @Parameters p
       JOIN @AGServers a ON a.AGName = p.AGName;
+	  PRINT @Message;
       PRINT @SQLText;
       IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
       FETCH NEXT FROM Job_Names INTO @JobName;
@@ -384,9 +391,13 @@ BEGIN;
   IF (SELECT Operation FROM @Parameters) = 'E' -- Enable Schedule Exceptions
   BEGIN; 
 
+   SELECT
+	 @Message       = 'Starting Job Exceptions Data on ' + @@SERVERNAME;
+	PRINT @Message;
+
     SET @SQLText    = '';
     SELECT
-     @SQLText       = p.CRLF + @SQLText + 'EXECUTE msdb.dbo.sp_update_schedule @schedule_id=' + Cast(s.schedule_id AS Varchar(8)) + ',@enabled=1; /* ' + j.name + ' */'
+     @SQLText       = @SQLText + p.CRLF + 'EXECUTE msdb.dbo.sp_update_schedule @schedule_id=' + Cast(s.schedule_id AS Varchar(8)) + ',@enabled=1; /* ' + j.name + ' */ '
     FROM msdb.dbo.sysschedules s
     JOIN msdb.dbo.sysjobschedules js ON js.schedule_id = s.schedule_id
     JOIN msdb.dbo.sysjobs j ON j.job_id = js.job_id
