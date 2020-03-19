@@ -25,8 +25,10 @@ Class FBUtilsClass
 Dim objADOCmd, objADOConn, objAutoUpdate, objFile, objFSO, objShell, objWMI, objWMIReg
 Dim colPrcEnvVars
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
-Dim strBuiltinDom, strClusterName, strCmd, strCmdPS, strCmdSQL, strGroupDBA, strGroupDBANonSA, strIsInstallDBA, strNTAuth, strOSVersion
-Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools, strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum, strUserAccount, strWaitShort
+Dim strBuiltinDom, strClusterName, strCmd, strCmdPS, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA
+Dir strIsInstallDBA, strNTAuth, strOSVersion
+Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools
+Dir strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum, strUserAccount, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -48,6 +50,7 @@ Private Sub Class_Initialize
   If strProcessIdCode <> "FBCV" Then
     strClusterName    = GetBuildfileValue("ClusterName")
     strCmdPS          = GetBuildfileValue("CmdPS")
+    strDirSystemDataBackup = GetBuildfileValue("DirSystemDataBackup")
     strGroupDBA       = GetBuildfileValue("GroupDBA")
     strGroupDBANonSA  = GetBuildfileValue("GroupDBANonSA")
     strIsInstallDBA   = GetBuildfileValue("IsInstallDBA")
@@ -55,7 +58,7 @@ Private Sub Class_Initialize
     strProgCacls      = GetBuildfileValue("ProgCacls")
     strServer         = GetBuildfileValue("AuditServer")
     strServInst       = GetBuildfileValue("ServInst")
-    strSIDDistComUsers = GetBuildfileValue("SIDDistComUsers")
+    strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
     strResponseNo     = GetBuildfileValue("ResponseNo")
     strResponseYes    = GetBuildfileValue("ResponseYes")
     strUserAccount    = GetBuildfileValue("UserAccount")
@@ -78,6 +81,20 @@ Sub CopyFile(strSource, strTarget)
   If Not objFSO.FileExists(strPath) Then
     objFile.Copy strPath, True
   End If
+
+End Sub
+
+
+Sub BackupDBMasterKey(strDB, strPassword)
+  Call DebugLog("BackupDBMasterKey: " & strDB)
+  Dim strPathNew
+
+  strPathNew        = strDirSystemDataBackup & strDB & "DBMasterKey.snk"
+  If objFSO.FileExists(strPathNew) Then
+    Call objFSO.DeleteFile(strPathNew, True)
+    Wscript.Sleep strWaitShort
+  End If
+  Call Util_ExecSQL(strCmdSQL & "-d """ & strDB & """ -Q", """BACKUP MASTER KEY TO FILE='" & strPathNew & "' ENCRYPTION BY PASSWORD='" & strPassword & "';""", 0)
 
 End Sub
 
@@ -982,6 +999,11 @@ End Sub
 
 
 End Class
+
+
+Sub BackupDBMasterKey(strDB, strPassword)
+  Call FBUtils.BackupDBMasterKey(strDB, strPassword)
+End Sub
 
 
 Sub CopyFile(strSource, strTarget)
