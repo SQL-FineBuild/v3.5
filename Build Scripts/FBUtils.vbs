@@ -26,9 +26,9 @@ Dim objADOCmd, objADOConn, objAutoUpdate, objFile, objFSO, objShell, objWMI, obj
 Dim colPrcEnvVars
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdPS, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA
-Dir strIsInstallDBA, strNTAuth, strOSVersion
+Dim strIsInstallDBA, strNTAuth, strOSVersion
 Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools
-Dir strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum, strUserAccount, strWaitShort
+Dim strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum, strUserAccount, strWaitShort
 
 
 Private Sub Class_Initialize

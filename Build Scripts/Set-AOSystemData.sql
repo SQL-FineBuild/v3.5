@@ -202,8 +202,8 @@ BEGIN;
   BEGIN; 
 
     SELECT
-	 @Message       = 'Starting Critical Data copy on ' + @@SERVERNAME;
-	PRINT @Message;
+     @Message       = 'Starting Critical Data copy on ' + @@SERVERNAME;
+    PRINT @Message;
 
     -- Requires Windows Local Admin access on source server to obtain passwords.  Do not give a Job account this access, instead run this manually on ad-hoc basis
     SELECT
@@ -315,9 +315,9 @@ BEGIN;
   IF (SELECT Operation FROM @Parameters) = 'S' -- Update Schedule data on Target System
   BEGIN; 
 
-   SELECT
-	 @Message       = 'Starting Schedule Data copy on ' + @@SERVERNAME;
-	PRINT @Message;
+    SELECT
+     @Message       = 'Starting Schedule Data copy on ' + @@SERVERNAME;
+    PRINT @Message;
     
     DECLARE Job_Schedules CURSOR FAST_FORWARD FOR
     SELECT
@@ -351,13 +351,13 @@ BEGIN;
   IF (SELECT Operation FROM @Parameters) = 'J' -- Update Job data on Target System
   BEGIN; 
 
-   SELECT
-	 @Message       = 'Starting Job Data copy on ' + @@SERVERNAME;
-	PRINT @Message;
+    SELECT
+     @Message       = 'Starting Job Data copy on ' + @@SERVERNAME;
+    PRINT @Message;
   
     DECLARE Job_Names CURSOR FAST_FORWARD FOR
     SELECT
-     j.name
+     Replace(j.name, '''', '''''')
     FROM msdb.dbo.sysjobs j
     WHERE enabled = 0
     ORDER BY j.name;
@@ -367,7 +367,7 @@ BEGIN;
     WHILE @@FETCH_STATUS = 0  
     BEGIN;
       SELECT 
-	   @Message     = 'Processing job ''' + @JobName + ''''
+       @Message     = 'Processing job ''' + @JobName + ''''
       ,@SQLText     = 'IF EXISTS(SELECT 1 FROM [' + a.PrimaryServer + '].msdb.dbo.sysjobs WHERE name = ''' + @JobName + ''' AND enabled = 1) EXECUTE msdb.dbo.sp_update_job @job_name=''' + @JobName + ''',@enabled=1;'
       FROM @Parameters p
       JOIN @AGServers a ON a.AGName = p.AGName;
@@ -391,9 +391,9 @@ BEGIN;
   IF (SELECT Operation FROM @Parameters) = 'E' -- Enable Schedule Exceptions
   BEGIN; 
 
-   SELECT
-	 @Message       = 'Starting Job Exceptions Data on ' + @@SERVERNAME;
-	PRINT @Message;
+    SELECT
+     @Message       = 'Starting Job Exceptions Data on ' + @@SERVERNAME;
+    PRINT @Message;
 
     SET @SQLText    = '';
     SELECT
@@ -490,11 +490,14 @@ USE [msdb]
 GO
 
 EXEC sp_addrole 'FB_AGSystemData',dbo;
-GRANT EXECUTE ON dbo.sp_update_job      TO FB_AGSystemData;
-GRANT EXECUTE ON dbo.sp_update_schedule TO FB_AGSystemData;
-GRANT SELECT  ON dbo.sysjobs            TO FB_AGSystemData;
-GRANT SELECT  ON dbo.sysjobschedules    TO FB_AGSystemData;
-GRANT SELECT  ON dbo.sysschedules       TO FB_AGSystemData;
+GRANT EXECUTE ON dbo.sp_add_alert                 TO FB_AGSystemData;
+GRANT EXECUTE ON dbo.sp_delete_alert              TO FB_AGSystemData;
+GRANT EXECUTE ON dbo.sp_update_job                TO FB_AGSystemData;
+GRANT EXECUTE ON dbo.sp_update_schedule           TO FB_AGSystemData;
+GRANT EXECUTE ON dbo.sysmail_help_configure_sp    TO FB_AGSystemData;
+GRANT SELECT  ON dbo.sysjobs                      TO FB_AGSystemData;
+GRANT SELECT  ON dbo.sysjobschedules              TO FB_AGSystemData;
+GRANT SELECT  ON dbo.sysschedules                 TO FB_AGSystemData;
 IF NOT EXISTS (SELECT 1 FROM sys.sysusers WHERE name = '$(strAccount)') EXEC sp_grantdbaccess '$(strAccount)';
 EXEC sp_addrolemember 'FB_AGSystemData','$(strAccount)';
 EXEC sp_addrolemember 'SQLAgentOperatorRole','FB_AGSystemData';
