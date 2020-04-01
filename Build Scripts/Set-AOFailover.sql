@@ -285,7 +285,7 @@ BEGIN;
       JOIN [master].[sys].[databases] d ON d.database_id = drsp.database_id
       WHERE drsp.synchronization_state_desc NOT IN ('SYNCHRONIZED', 'NOT SYNCHRONIZING') OR drsp.last_commit_lsn <> drss.last_commit_lsn;
       SELECT
-       @NonSync     = CASE WHEN p.Force <> 'Y' THEN @@ROWCOUNT ELSE 0 END
+       @NonSync     = CASE WHEN p.Force = 'Y' THEN 0 ELSE @@ROWCOUNT END
       FROM @Parameters p;
     END;
 
@@ -316,7 +316,7 @@ BEGIN;
       JOIN [master].[sys].[databases] d ON d.database_id = drss.database_id
       WHERE drss.synchronization_state_desc NOT IN ('SYNCHRONIZED', 'NOT SYNCHRONIZING') OR drss.last_commit_lsn <> drsp.last_commit_lsn;
       SELECT
-       @NonSync     = CASE WHEN p.Force <> 'Y' THEN @@ROWCOUNT ELSE 0 END
+       @NonSync     = CASE WHEN p.Force = 'Y' THEN 0 ELSE @@ROWCOUNT END
       FROM @Parameters p;
     END;
     SELECT
@@ -332,6 +332,35 @@ BEGIN;
 
 END;
 GO
+
+-- Create table for System Data Copy Job Exceptions
+
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[FB_AGPostFailoverDBUsers]') AND type in (N'U'))
+  DROP TABLE [dbo].[FB_AGPostFailoverDBUsers];
+GO
+
+CREATE TABLE [dbo].[FB_AGPostFailoverDBUsers]
+([Id]          INTEGER IDENTITY(1,1)
+,[DBName]      NVARCHAR(120) NOT NULL
+,[DBUser]      NVARCHAR(120) NOT NULL
+,[Login]       NVARCHAR(120) NOT NULL
+,CONSTRAINT [PK_AGPostFailoverDBUsers] PRIMARY KEY CLUSTERED ([Id] ASC));
+CREATE UNIQUE NONCLUSTERED INDEX [IX_FB_AGPostFailoverDBUsers] ON [dbo].[FB_AGPostFailoverDBUsers]
+([DBNAME] ASC
+,[DBUser] ASC
+,[Login] ASC);
+GO
+
+-- Create default user mappings
+
+INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+  VALUES('DQS_MAIN', 'dqs_service', '##MS_dqs_service_login##');
+INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+  VALUES('DQS_PROJECTS', 'dqs_service', '##MS_dqs_service_login##');
+INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+  VALUES('DQS_STAGING_DATA', 'dqs_service', '##MS_dqs_service_login##');
+INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+  VALUES('SSISDB', '##MS_SSISServerCleanupJobUser##', '##MS_SSISServerCleanupJobLogin##');
 
 -- Process FB_AGPostFailover Procedure
 IF EXISTS (SELECT 1 FROM sys.procedures WHERE name = N'FB_AGPostFailover')
@@ -359,6 +388,8 @@ BEGIN;
    @AGName          NVARCHAR(400)
   ,@AlertName       NVARCHAR(400)
   ,@DBName          NVARCHAR(400)
+  ,@DBUser          NVARCHAR(400)
+  ,@Login           NVARCHAR(400)
   ,@Owner           NVARCHAR(400)
   ,@Role            NVARCHAR(400)
   ,@Enabled         INT
@@ -413,7 +444,7 @@ BEGIN;
      @SQLText = 'EXEC msdb.dbo.sp_update_alert @name=''' + @AlertName + ''''
     ,@SQLText = @SQLText + CASE WHEN @Role = 'PRIMARY'   THEN ',@enabled=1;'
                                 WHEN @Role = 'SECONDARY' THEN ',@enabled=0;'
-	                            ELSE ',@enabled=' + Cast(@Enabled AS NVarchar(2)) + ';' END;
+                                ELSE ',@enabled=' + Cast(@Enabled AS NVarchar(2)) + ';' END;
     PRINT @SQLText;
     EXEC sp_executeSQL @SQLText;
     FETCH NEXT FROM Log_Alerts INTO @AlertName, @Enabled, @Role;
@@ -443,7 +474,7 @@ BEGIN;
      @SQLText = 'EXEC msdb.dbo.sp_update_schedule @schedule_id=' + @ScheduleId
     ,@SQLText = @SQLText + CASE WHEN @Role = 'PRIMARY'   THEN ',@enabled=1;'
                                 WHEN @Role = 'SECONDARY' THEN ',@enabled=0;'
-	                            ELSE ',@enabled=' + Cast(@Enabled AS NVarchar(2)) + ';' END;
+                                ELSE ',@enabled=' + Cast(@Enabled AS NVarchar(2)) + ';' END;
     PRINT @SQLText;
     EXEC sp_executeSQL @SQLText;
     FETCH NEXT FROM Job_Schedules INTO @ScheduleId, @Enabled, @Role;
@@ -482,7 +513,7 @@ BEGIN;
   WHILE @@FETCH_STATUS = 0  
   BEGIN;
     SELECT @SQLText = CASE WHEN @Role = 'SECONDARY' THEN 'ALTER DATABASE [' + @DBName + '] SET HADR RESUME;'
-	                       ELSE 'ALTER AUTHORIZATION ON DATABASE::[' + @DBName + '] TO [' + @Owner + '];' END;
+                           ELSE 'ALTER AUTHORIZATION ON DATABASE::[' + @DBName + '] TO [' + @Owner + '];' END;
     PRINT @SQLText;
     EXEC sp_executeSQL @SQLText;
     FETCH NEXT FROM AG_DBNames INTO @AGName, @DBName, @Role, @Owner;
@@ -490,27 +521,38 @@ BEGIN;
   CLOSE AG_DBNames;
   DEALLOCATE AG_DBNames;
 
-  -- Update DQ Authorisation for new Primary Server
-  IF EXISTS (SELECT 1 FROM master.sys.databases WHERE name = 'DQS_MAIN' AND @Role = 'PRIMARY')
-  BEGIN;
-	SELECT @SQLText = 'USE DQS_MAIN;ALTER USER dqs_service WITH LOGIN=[##MS_dqs_service_login##];';
-    PRINT @SQLText;
-    EXEC sp_executeSQL @SQLText;
-  END;
+  -- Update User Mappings for new Primary Server
+  DECLARE AG_DBUsers CURSOR FAST_FORWARD FOR
+  SELECT
+   DBName 
+  ,DBUser
+  ,Login 
+  FROM master.dbo.FB_AGPostFailoverDBUsers
+  ORDER BY DBName, DBUser;
 
-  IF EXISTS (SELECT 1 FROM master.sys.databases WHERE name = 'DQS_PROJECTS' AND @Role = 'PRIMARY')
+  OPEN AG_DBUsers;
+  FETCH NEXT FROM AG_DBUsers INTO @DBName, @DBUser, @Login;
+  WHILE @@FETCH_STATUS = 0  
   BEGIN;
-    SELECT @SQLText = 'USE DQS_PROJECTS;ALTER USER dqs_service WITH LOGIN=[##MS_dqs_service_login##];';
+    IF EXISTS (SELECT 1 FROM master.sys.databases WHERE name = @DBName AND @Role = 'PRIMARY')
+    BEGIN;
+    SELECT 
+     @SQLText       = 'USE [' + @DBName + '];IF EXISTS (SELECT 1 FROM sys.sysusers WHERE name = ' + @DBUser + ' AND islogin = 1) '
+    ,@SQLText       = @SQLText + 'ALTER USER [' + @DBUser + '] WITH LOGIN = [' + @Login + '];'
     PRINT @SQLText;
     EXEC sp_executeSQL @SQLText;
+    END;
+    FETCH NEXT FROM AG_DBUsers INTO @DBName, @DBUser, @Login;;
   END;
+  CLOSE AG_DBUsers;
+  DEALLOCATE AG_DBUsers;
 
 END;
 GO
 
 -- Process Job to run FB_AGPostFailover
 DECLARE 
-  @jobId BINARY(16);
+  @jobId            BINARY(16);
 
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'DBA Tasks' AND category_class=1)
   EXEC msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'DBA Tasks';
@@ -587,6 +629,8 @@ EXEC msdb.dbo.sp_add_alert @name=N'Event - AG Failover',
 		@category_name=N'[Uncategorized]', 
 		@job_name=N'DBA: AG State Change';
 
+EXEC msdb.dbo.sp_add_notification @alert_name=N'Event - AG Failover', @operator_name=N'SQL Alerts', @notification_method=1;
+
 IF EXISTS (SELECT 1 FROM msdb.dbo.sysalerts WHERE name=N'AG State Change')
   EXEC msdb.dbo.sp_delete_alert @name=N'Event - AG State Change';
 
@@ -598,5 +642,7 @@ EXEC msdb.dbo.sp_add_alert @name=N'Event - AG State Change',
 		@include_event_description_in=0, 
 		@category_name=N'[Uncategorized]', 
 		@job_name=N'DBA: AG State Change';
+
+EXEC msdb.dbo.sp_add_notification @alert_name=N'Event - AG State Change', @operator_name=N'SQL Alerts', @notification_method=1;
 
 GO
