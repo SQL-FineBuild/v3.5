@@ -96,7 +96,7 @@ IF EXISTS (SELECT 1 FROM sys.procedures WHERE name = N'FB_AGFailover')
 GO
 
 CREATE       PROC [dbo].[FB_AGFailover]
- @AGName            NVARCHAR(120)      = '%' -- Name of AG for Failover
+ @AGName            NVARCHAR(128)      = '%' -- Name of AG for Failover
 ,@TargetServer      NVARCHAR(128)      = ''  -- Name of desired New Primary server
 ,@Force             CHAR(1)            = 'N' -- Force failover even if Primary and Secondary not synchronised
 ,@Execute           CHAR(1)            = 'Y' -- Execute commands
@@ -333,33 +333,72 @@ BEGIN;
 END;
 GO
 
--- Create table for System Data Copy Job Exceptions
+-- Create table for Database Owner Mappings
 
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[FB_AGPostFailoverDBUsers]') AND type in (N'U'))
-  DROP TABLE [dbo].[FB_AGPostFailoverDBUsers];
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[FB_AGPostFailoverDBOwner]') AND type in (N'U'))
+  DROP TABLE [dbo].[FB_AGPostFailoverDBOwner];
 GO
 
-CREATE TABLE [dbo].[FB_AGPostFailoverDBUsers]
+CREATE TABLE [dbo].[FB_AGPostFailoverDBOwner]
 ([Id]          INTEGER IDENTITY(1,1)
-,[DBName]      NVARCHAR(120) NOT NULL
-,[DBUser]      NVARCHAR(120) NOT NULL
-,[Login]       NVARCHAR(120) NOT NULL
-,CONSTRAINT [PK_AGPostFailoverDBUsers] PRIMARY KEY CLUSTERED ([Id] ASC));
-CREATE UNIQUE NONCLUSTERED INDEX [IX_FB_AGPostFailoverDBUsers] ON [dbo].[FB_AGPostFailoverDBUsers]
+,[DBName]      NVARCHAR(128) NOT NULL
+,[DBOwner]     NVARCHAR(128) NOT NULL
+,CONSTRAINT [PK_AGPostFailoverDBOwner] PRIMARY KEY CLUSTERED ([Id] ASC));
+CREATE UNIQUE NONCLUSTERED INDEX [IX_FB_AGPostFailoverDBOwner] ON [dbo].[FB_AGPostFailoverDBOwner]
+([DBNAME] ASC
+,[DBOwner] ASC);
+GO
+
+-- Create default DB Owner mappings
+
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('master', 'sa');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('model', 'sa');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('msdb', 'sa');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('tempdb', 'sa');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('mssqlsystemresource', 'sa');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('SSISDB', 'sa');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  SELECT name, 'sa' FROM master.sys.databases WHERE is_distributor = 1;
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('DQS_MAIN', '##MS_dqs_db_owner_login##');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('DQS_PROJECTS', '##MS_dqs_db_owner_login##');
+INSERT INTO [dbo].[FB_AGPostFailoverDBOwner] (DBName, DBOwner) 
+  VALUES('DQS_STAGING_DATA', '##MS_dqs_db_owner_login##');
+
+-- Create table for Database User Mappings
+
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[FB_AGPostFailoverDBUser]') AND type in (N'U'))
+  DROP TABLE [dbo].[FB_AGPostFailoverDBUser];
+GO
+
+CREATE TABLE [dbo].[FB_AGPostFailoverDBUser]
+([Id]          INTEGER IDENTITY(1,1)
+,[DBName]      NVARCHAR(128) NOT NULL
+,[DBUser]      NVARCHAR(128) NOT NULL
+,[Login]       NVARCHAR(128) NOT NULL
+,CONSTRAINT [PK_AGPostFailoverDBUser] PRIMARY KEY CLUSTERED ([Id] ASC));
+CREATE UNIQUE NONCLUSTERED INDEX [IX_FB_AGPostFailoverDBUser] ON [dbo].[FB_AGPostFailoverDBUser]
 ([DBNAME] ASC
 ,[DBUser] ASC
 ,[Login] ASC);
 GO
 
--- Create default user mappings
+-- Create default DB User mappings
 
-INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+INSERT INTO [dbo].[FB_AGPostFailoverDBUser] (DBName, DBUser, Login) 
   VALUES('DQS_MAIN', 'dqs_service', '##MS_dqs_service_login##');
-INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+INSERT INTO [dbo].[FB_AGPostFailoverDBUser] (DBName, DBUser, Login) 
   VALUES('DQS_PROJECTS', 'dqs_service', '##MS_dqs_service_login##');
-INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+INSERT INTO [dbo].[FB_AGPostFailoverDBUser] (DBName, DBUser, Login) 
   VALUES('DQS_STAGING_DATA', 'dqs_service', '##MS_dqs_service_login##');
-INSERT INTO [dbo].[FB_AGPostFailoverDBUsers] (DBName, DBUser, Login) 
+INSERT INTO [dbo].[FB_AGPostFailoverDBUser] (DBName, DBUser, Login) 
   VALUES('SSISDB', '##MS_SSISServerCleanupJobUser##', '##MS_SSISServerCleanupJobLogin##');
 
 -- Process FB_AGPostFailover Procedure
@@ -380,6 +419,7 @@ AS
 -- Date        Name  Comment
 -- 25/06/2019  EdV   Initial code
 -- 28/01/2020  EdV   Initial FineBuild Version
+-- 02/04/2020  EdV   Replaced fixed code with lookups to FB_AGPostFailoverDBOwner, FB_AGPostFailoverDBUser
 --
 BEGIN;
   SET NOCOUNT ON;
@@ -396,24 +436,6 @@ BEGIN;
   ,@ScheduleId      VARCHAR(8)
   ,@ServerName      NVARCHAR(400)
   ,@SQLText         NVARCHAR(4000);
-
-  CREATE TABLE #SpecialDB
-   (Name           NVARCHAR(120));
-
-  INSERT INTO #SpecialDB (Name)
-  SELECT 'master'
-  UNION ALL
-  SELECT 'model'
-  UNION ALL
-  SELECT 'msdb'
-  UNION ALL
-  SELECT 'tempdb'
-  UNION ALL
-  SELECT 'mssqlsystemresource'
-  UNION ALL
-  SELECT 'SSISDB'
-  UNION
-  SELECT name FROM master.sys.databases WHERE is_distributor = 1;
 
   WAITFOR DELAY '00:01'
 
@@ -488,10 +510,8 @@ BEGIN;
    ag.name 
   ,db.name AS database_name
   ,UPPER(rs.role_desc) AS role_desc
-  ,CASE WHEN sp.name > '' THEN 'sa' -- EMV 14/05/19
-        WHEN db.name LIKE 'DQS_%' THEN '##MS_dqs_db_owner_login##' -- EMV 16/05/19
-        WHEN c.name > '' THEN c.credential_identity -- EMV 14/05/19
-        ELSE 'sa' END -- EMV 14/05/19 
+  ,CASE WHEN do.DBName IS NOT NULL THEN do.DBOwner
+        ELSE c.credential_identity END AS DBOwner
   FROM master.sys.availability_groups_cluster ag
   JOIN master.sys.dm_hadr_availability_replica_states rs
     ON rs.group_id = ag.group_id
@@ -503,8 +523,8 @@ BEGIN;
     ON db.group_database_id = dbc.group_database_id
   LEFT OUTER JOIN sys.credentials c
     ON c.name = 'StandardDBOwner'
-  LEFT OUTER JOIN #SpecialDB sp
-    ON sp.name = db.name
+  LEFT OUTER JOIN dbo.FB_AGPostFailoverDBOwner do
+    ON do.DBName = db.name
   WHERE UPPER(ar.replica_server_name) = @ServerName
   ORDER BY ag.name, db.name;
 
@@ -527,7 +547,7 @@ BEGIN;
    DBName 
   ,DBUser
   ,Login 
-  FROM master.dbo.FB_AGPostFailoverDBUsers
+  FROM master.dbo.FB_AGPostFailoverDBUser
   ORDER BY DBName, DBUser;
 
   OPEN AG_DBUsers;
@@ -537,7 +557,7 @@ BEGIN;
     IF EXISTS (SELECT 1 FROM master.sys.databases WHERE name = @DBName AND @Role = 'PRIMARY')
     BEGIN;
     SELECT 
-     @SQLText       = 'USE [' + @DBName + '];IF EXISTS (SELECT 1 FROM sys.sysusers WHERE name = ' + @DBUser + ' AND islogin = 1) '
+     @SQLText       = 'USE [' + @DBName + '];IF EXISTS (SELECT 1 FROM sys.sysusers WHERE name = ''' + @DBUser + ''' AND islogin = 1) '
     ,@SQLText       = @SQLText + 'ALTER USER [' + @DBUser + '] WITH LOGIN = [' + @Login + '];'
     PRINT @SQLText;
     EXEC sp_executeSQL @SQLText;
