@@ -50,6 +50,7 @@ Private Sub Class_Initialize
   If strProcessIdCode <> "FBCV" Then
     strClusterName    = GetBuildfileValue("ClusterName")
     strCmdPS          = GetBuildfileValue("CmdPS")
+    strCmdSQL         = GetBuildfileValue("CmdSQL")
     strDirSystemDataBackup = GetBuildfileValue("DirSystemDataBackup")
     strGroupDBA       = GetBuildfileValue("GroupDBA")
     strGroupDBANonSA  = GetBuildfileValue("GroupDBANonSA")
@@ -89,11 +90,12 @@ Sub BackupDBMasterKey(strDB, strPassword)
   Call DebugLog("BackupDBMasterKey: " & strDB)
   Dim strPathNew
 
-  strPathNew        = strDirSystemDataBackup & strDB & "DBMasterKey.snk"
+  strPathNew        = strDirSystemDataBackup & "\" & strDB & "DBMasterKey.snk"
   If objFSO.FileExists(strPathNew) Then
     Call objFSO.DeleteFile(strPathNew, True)
     Wscript.Sleep strWaitShort
   End If
+
   Call Util_ExecSQL(strCmdSQL & "-d """ & strDB & """ -Q", """BACKUP MASTER KEY TO FILE='" & strPathNew & "' ENCRYPTION BY PASSWORD='" & strPassword & "';""", 0)
 
 End Sub
@@ -339,6 +341,48 @@ Private Function HexStrToSIDStr(strValue)
 End Function
 
 
+Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
+  Call DebugLog("GetOUAttr: " & strOUPath & ", " & strOUAttr)
+  Dim objRecordSet
+  Dim arrOUPath
+  Dim strAttrValue, strOUCName, strCName
+
+  arrOUPath         = Split(Replace("OU=" & strOUPath, ".", ".OU="), ".")
+  strOUCName        = Replace("CN=" & strUserDNSDomain, ".", ",CN=")
+  For Each strCName In arrOUPath
+    strOUCName      = strCName & "," & strOUCName
+  Next
+  CAll DebugLog("OU CName: " & strOUCName)
+
+  On Error Resume Next 
+  objADOCmd.CommandText          = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(distinguishedName=" & strOUCName & "));name," & strOUAttr
+  Set objRecordSet  = objADOCmd.Execute
+
+  On Error Goto 0
+  Select Case True
+    Case Not IsObject(objRecordset)
+      ' Nothing
+    Case objRecordset Is Nothing
+      ' Nothing
+    Case IsNull(objRecordset)
+      ' Nothing
+    Case objRecordset.RecordCount = 0 
+      ' Nothing
+    Case IsNull(objRecordset.Fields(1).Value)
+      ' Nothing
+    Case Instr(strUserAttr, "GUID") > 0
+      strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
+      strAttrValue  = HexStrToGUID(strAttrValue)
+    Case Else
+      strAttrValue  = objRecordset.Fields(1).Value
+  End Select
+
+  err.Number        = 0
+  GetOUAttr         = strAttrValue
+
+End Function
+
+
 Function Max(intA, intB)
 
   Select Case True
@@ -521,7 +565,7 @@ End Sub
 
 
 Private Function GetShareDrive(strCmd)
-  Call DebugLog("GetShareDrive:")
+  Call DebugLog("GetShareDrive: " & strCmd)
   Dim intIdx, intIdx1, intIdx2, intIdx3, intIdx4
   Dim strAlphabet, strDriveList, strShare, strShareDrive
 
@@ -529,7 +573,9 @@ Private Function GetShareDrive(strCmd)
   strDriveList      = GetBuildfileValue("DriveList")
   strShareDrive     = ""
   For intIdx = 3 To Len(strAlphabet)
+    strDebugMsg1    = "Index " & CStr(intIdx)
     If Instr(strDriveList, Mid(strAlphabet, intIdx, 1)) = 0 Then
+      strDebugMsg2    = "Drive Found"
       strShareDrive = Mid(strAlphabet, intIdx, 1) & ":"
       Exit For
     End If
@@ -540,6 +586,9 @@ Private Function GetShareDrive(strCmd)
     intIdx1         = Instr(intIdx  + 2, strCmd, "\")
     intIdx2         = Instr(intIdx1 + 1, strCmd, "\")
     intIdx3         = Instr(intIdx1 + 1, strCmd, """")
+    If intIdx3 = 0 Then
+      intIdx3       = Len(strCmd)
+    End If
     intIdx4         = Min(intIdx2, intIdx3)
     strShare        = Mid(strCmd, intIdx, intIdx4 - intIdx)
     Call Util_RunExec("NET USE " & strShareDrive & " """ & strShare & """ /PERSISTENT:NO", "EOF", "", 0)
@@ -1032,6 +1081,10 @@ End Function
 
 Function GetCmdSQL()
   GetCmdSQL         = FBUtils.GetCmdSQL()
+End Function
+
+Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
+  GetOUAttr         = FBUtils.GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
 End Function
 
 Function Max(intA, intB)

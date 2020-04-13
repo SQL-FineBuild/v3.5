@@ -42,7 +42,8 @@ Private Sub Class_Initialize
   strClusIPV6Mask     = GetBuildfileValue("ClusIPV6Mask")
   strClusIPV6Network  = GetBuildfileValue("ClusIPV6Network")
   strClusStorage    = GetBuildfileValue("ClusStorage")
-  strClusterHost    = ""
+  strClusterHost    = GetBuildfileValue("ClusterHost")
+  strClusterName    = GetBuildfileValue("ClusterName")
   strCSVRoot        = GetBuildfileValue("CSVRoot")
   strOSVersion      = GetBuildfileValue("OSVersion")
   strPreferredOwner = GetBuildfileValue("PreferredOwner")
@@ -54,12 +55,9 @@ Private Sub Class_Initialize
   strUserDNSDomain  = ""
   Set objWMIDNS     = Nothing
 
-  objWMIReg.GetStringValue strHKLM,"Cluster\","ClusterName",strClusterName
-  If strClusterName > "" Then
-    strClusterHost  = "YES"
-    Call OpenCluster()
+  If strClusterHost = "YES" Then
+    Call ConnectCluster()
   End If
-  Call SetBuildfileValue("ClusterHost", strClusterHost)
 
 End Sub
 
@@ -111,10 +109,32 @@ Sub AddChildNode(strProcess, strResourceName)
 
   Call SetResourceOff(strResourceName, "") 
 
+  Call AddOwner(strResourceName)
+
+  Call SetResourceOn(strResourceName, "")
+
+End Sub
+
+
+Sub AddOwner(strResourceName)
+  Call DebugLog("AddOwner: " & strResourceName)
+
   strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /ADDOWNER:""" & strServer & """" 
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
 
-  Call SetResourceOn(strResourceName, "")
+End Sub
+
+
+Sub ConnectCluster()
+  Call DebugLog("ConnectCluster:")
+
+  objWMIReg.GetStringValue strHKLM,"Cluster\","ClusterName",strClusterName
+  If strClusterName > "" Then
+    strClusterHost  = "YES"
+    Call OpenCluster()
+  End If
+  Call SetBuildfileValue("ClusterHost", strClusterHost)
+  Call SetBuildfileValue("ClusterName", strClusterName)
 
 End Sub
 
@@ -249,10 +269,18 @@ Private Sub OpenCluster()
 End Sub
 
 
-Sub RemoveOwner(strNetworkName)
-  Call DebugLog("RemoveOwner: " & strNetworkName)
+Sub RemoveOwner(strResourceName, strOwnerNode)
+  Call DebugLog("RemoveOwner: " & strResourceName)
+  Dim strOwner
 
-  strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE ""SQL Network Name (" & strNetworkName & ")"" /REMOVEOWNER:""" & strServer & """ "
+  Select Case True
+    Case strOwnerNode <> ""
+      strOwner      = strOwnerNode
+    Case Else
+      strOwner      = strServer
+  End Select
+
+  strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /REMOVEOWNER:""" & strOwner & """ "
   Call Util_RunExec(strCmd, "", strResponseYes, 5042)
 
 End Sub
@@ -327,8 +355,11 @@ End Sub
 
 Private Sub SetupClusterNetwork(strProcess, strClusterGroup, strResourceName, strNetworkName)
   Call DebugLog("SetupClusterNetwork:")
+  Dim arrClusterNodes
+  Dim objClusterNode
   Dim strDNSName, strNetAddress
 
+' Create Network Name
   strDNSName        = Left(strClusterGroup, Instr(strClusterGroup & " ", " ") - 1)
   strCmd            = "CLUSTER """ & strClusterName & """ RESOURCE """ & strNetworkName & """ /CREATE /GROUP:""" & strClusterGroup & """ /TYPE:""Network Name"" /PRIV DNSNAME=""" & strDNSName & """"
   If strOSVersion < "6.3A" Then
@@ -336,6 +367,15 @@ Private Sub SetupClusterNetwork(strProcess, strClusterGroup, strResourceName, st
   End If
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
 
+' Remove other nodes from Network Name ownership list
+  Set arrClusterNodes = GetClusterNodes()
+  For Each objClusterNode In arrClusterNodes
+    If UCase(objClusterNode.Name) <> strServer Then
+      Call RemoveOwner(strNetworkName, objClusterNode.Name)
+    End If
+  Next
+
+' Add IPV4 Address
   If strClusIPV4Network <> "" Then
     strNetAddress   = GetClusterIPAddress(strNetworkName, strProcess, "IPv4", "IP")
     Call SetBuildfileValue("ClusterIPV4" & strProcess, strNetAddress)
@@ -345,6 +385,7 @@ Private Sub SetupClusterNetwork(strProcess, strClusterGroup, strResourceName, st
     Call Util_RunExec(strCmd, "", strResponseYes, 5003)
   End If
 
+' Add IPV6 Address
   If strClusIPV6Network <> "" Then
     strNetAddress   = GetClusterIPAddress(strNetworkName, strProcess, "IPv6", "IP")
     Call SetBuildfileValue("ClusterIPV6" & strProcess, strNetAddress)
@@ -354,6 +395,7 @@ Private Sub SetupClusterNetwork(strProcess, strClusterGroup, strResourceName, st
   Call Util_RunExec(strCmd, "", strResponseYes, 5003)
   End If
 
+' Add Network Name Dependency
   If strResourceName <> "" Then
     strCmd          = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /ADDDEP:""" & strNetworkName & """"
     Call Util_RunExec(strCmd, "", strResponseYes, 5003)
@@ -885,6 +927,14 @@ End Sub
 End Class
 
 
+Sub AddOwner(strResourceName)
+  Call FBManageCluster.AddOwner(strResourceName)
+End Sub
+
+Sub ConnectCluster()
+  Call FBManageCluster.ConnectCluster()
+End Sub
+
 Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strPriority)
   Call FBManageCluster.BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strPriority)
 End Sub
@@ -933,8 +983,8 @@ Sub MoveToGroup(strClusterGroup, strNode)
   Call FBManageCluster.MoveToGroup(strClusterGroup, strNode)
 End Sub
 
-Sub RemoveOwner(strNetworkName)
-  Call FBManageCluster.RemoveOwner(strNetworkName)
+Sub RemoveOwner(strResourceName, strOwnerNode)
+  Call FBManageCluster.RemoveOwner(strResourceName, strOwnerNode)
 End Sub
 
 Sub SetOwnerNode(strCluster)
