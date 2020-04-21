@@ -343,38 +343,35 @@ End Function
 
 Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
   Call DebugLog("GetOUAttr: " & strOUPath & ", " & strOUAttr)
-  Dim objRecordSet
+  Dim objOU
   Dim arrOUPath
   Dim strAttrValue, strOUCName, strCName
 
   arrOUPath         = Split(Replace("OU=" & strOUPath, ".", ".OU="), ".")
-  strOUCName        = Replace("CN=" & strUserDNSDomain, ".", ",CN=")
+  strOUCName        = Replace("DC=" & strUserDNSDomain, ".", ",DC=")
   For Each strCName In arrOUPath
     strOUCName      = strCName & "," & strOUCName
   Next
-  CAll DebugLog("OU CName: " & strOUCName)
+  Call DebugLog("OU CName: " & strOUCName)
 
   On Error Resume Next 
-  objADOCmd.CommandText          = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(distinguishedName=" & strOUCName & "));name," & strOUAttr
-  Set objRecordSet  = objADOCmd.Execute
+  Set objOU         = GetObject("LDAP://" & strOUCName)
 
   On Error Goto 0
+  strAttrValue      = ""
   Select Case True
-    Case Not IsObject(objRecordset)
+    Case Not IsObject(objOU)
       ' Nothing
-    Case objRecordset Is Nothing
+    Case objOU Is Nothing
       ' Nothing
-    Case IsNull(objRecordset)
-      ' Nothing
-    Case objRecordset.RecordCount = 0 
-      ' Nothing
-    Case IsNull(objRecordset.Fields(1).Value)
+    Case IsNull(objOU)
       ' Nothing
     Case Instr(strUserAttr, "GUID") > 0
-      strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
+      strAttrValue  = objOU.Get(strOUAttr)
+      strAttrValue  = OctetToHexStr(strAttrValue)
       strAttrValue  = HexStrToGUID(strAttrValue)
     Case Else
-      strAttrValue  = objRecordset.Fields(1).Value
+      strAttrValue  = objOU.Get(strOUAttr)
   End Select
 
   err.Number        = 0
