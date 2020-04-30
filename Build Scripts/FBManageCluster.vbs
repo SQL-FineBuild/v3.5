@@ -18,9 +18,10 @@ Option Explicit
 Dim FBManageCluster: Set FBManageCluster = New FBManageClusterClass
 
 Class FBManageClusterClass
-  Dim objCluster, objShell, objRE, objWMI, objWMIDNS, objWMIReg
+  Dim colNodes, colResources
+  Dim objCluster, objNode, objShell, objRE, objResource, objWMI, objWMIClus, objWMIDNS, objWMIReg
   Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network, strClusStorage, strClusterHost, strClusterName, strCmd, strCSVRoot
-  Dim strFailoverClusterDisks, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
+  Dim strFailoverClusterDisks, strHKLM, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
   Dim intIndex
 
 
@@ -35,6 +36,7 @@ Private Sub Class_Initialize
   objRE.Global      = True
   objRE.IgnoreCase  = True
 
+  strHKLM           = &H80000002
   strClusIPV4Address  = GetBuildfileValue("ClusIPV4Address")
   strClusIPV4Mask     = GetBuildfileValue("ClusIPV4Mask")
   strClusIPV4Network  = GetBuildfileValue("ClusIPV4Network")
@@ -125,16 +127,52 @@ Sub AddOwner(strResourceName)
 End Sub
 
 
-Sub ConnectCluster()
-  Call DebugLog("ConnectCluster:")
+Function CheckClusterHost()
+  Call DebugLog("CheckClusterHose:")
 
   objWMIReg.GetStringValue strHKLM,"Cluster\","ClusterName",strClusterName
-  If strClusterName > "" Then
-    strClusterHost  = "YES"
-    Call OpenCluster()
-  End If
+  Select Case True
+    Case strClusterName > ""
+      CheckClusterHost  = "YES"
+    Case Else
+      CheckClusterHost = ""
+  End Select
+
+End Function
+
+
+Sub ConnectCluster()
+  Call DebugLog("OpenCluster:")
+  On Error Resume Next
+
+  strClusterName    = ""
+  Set objCluster    = CreateObject("MSCluster.Cluster")
+  objCluster.Open ""
+  Select Case True
+    Case err.Number = 0
+      Wscript.Sleep strWaitLong
+    Case Else ' Network stack must be ready when Cluster Service starts, otherwise RPC error (often 1722) given.  Restart Cluster and wait so it can become ready.
+      Call Util_RunExec("NET STOP  ""Cluster Service""", "", strResponseYes, 0)
+      Wscript.Sleep strWaitLong
+      Call Util_RunExec("NET START ""Cluster Service""", "", strResponseYes, 0)
+      Wscript.Sleep strWaitLong
+      Wscript.Sleep strWaitLong
+      Wscript.Sleep strWaitLong
+      objCluster.Open ""
+  End Select
+  intErrSave        = err.Number
+
+  Wscript.Sleep strWaitShort
+  Select Case True
+    Case IsNull(objCluster)
+      ' Nothing
+    Case Else
+      strClusterHost = "YES"
+      strClusterName = UCase(objCluster.Name)
+  End Select
   Call SetBuildfileValue("ClusterHost", strClusterHost)
   Call SetBuildfileValue("ClusterName", strClusterName)
+  Set objWMIClus    = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\mscluster")
 
 End Sub
 
@@ -236,39 +274,6 @@ Sub MoveToGroup(strClusterGroup, strNode)
 End Sub
 
 
-Private Sub OpenCluster()
-  Call DebugLog("OpenCluster:")
-  On Error Resume Next
-
-  strClusterName    = ""
-  Set objCluster    = CreateObject("MSCluster.Cluster")
-  objCluster.Open ""
-  Select Case True
-    Case err.Number = 0
-      Wscript.Sleep strWaitLong
-    Case Else ' Network stack must be ready when Cluster Service starts, otherwise RPC error (often 1722) given.  Restart Cluster and wait so it can become ready.
-      Call Util_RunExec("NET STOP  ""Cluster Service""", "", strResponseYes, 0)
-      Wscript.Sleep strWaitLong
-      Call Util_RunExec("NET START ""Cluster Service""", "", strResponseYes, 0)
-      Wscript.Sleep strWaitLong
-      Wscript.Sleep strWaitLong
-      Wscript.Sleep strWaitLong
-      objCluster.Open ""
-  End Select
-  intErrSave        = err.Number
-
-  Wscript.Sleep strWaitShort
-  Select Case True
-    Case IsNull(objCluster)
-      ' Nothing
-    Case Else
-      strClusterName = UCase(objCluster.Name)
-  End Select
-  Call SetBuildfileValue("ClusterName", strClusterName)
-
-End Sub
-
-
 Sub RemoveOwner(strResourceName, strOwnerNode)
   Call DebugLog("RemoveOwner: " & strResourceName)
   Dim strOwner
@@ -328,6 +333,7 @@ End Sub
 
 Private Sub SetupClusterService(strClusterGroup, strResourceName, strServiceName, strServiceType, strServiceDesc, strServiceCheck)
   Call DebugLog("SetupClusterService: " & strResourceName & ", " & strServiceName)
+  Dim strResGUID, strServiceKey
 
   If strServiceType <> "" Then
     strCmd          = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /CREATE /GROUP:""" & strClusterGroup & """ "
@@ -346,17 +352,32 @@ Private Sub SetupClusterService(strClusterGroup, strResourceName, strServiceName
   End If
 
   If strServiceCheck <> "" Then
-    strCmd          = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /ADDCHECK:""" & strServiceCheck & """"
+    strServiceKey   = strServiceCheck
+    If Instr(strServiceKey, "{GUID}") > 0 Then
+      Set colResources = objWMIClus.ExecQuery("Select Id from MSCluster_Resource WHERE Name = '" & strResourceName & "'")
+      For Each objResource In colResources
+        strResGUID  = objResource.Id
+      Next
+      strServiceKey  = Replace(strServiceKey, "{GUID}", strResGUID)
+      Call Util_RegWrite("HKLM\" & strServiceKey, "", "REG_SZ")
+    End If
+    strCmd          = "CLUSTER """ & strClusterName & """ RESOURCE """ & strResourceName & """ /ADDCHECK:""" & strServiceKey & """"
     Call Util_RunExec(strCmd, "", strResponseYes, 183)
   End If
+
+  strDebugMsg1      = "Remove Secondary nodes from Service Name ownership list"
+  Set colNodes      = GetClusterNodes()
+  For Each objNode In colNodes
+    If UCase(objNode.Name) <> strServer Then
+      Call RemoveOwner(strResourceName, objNode.Name)
+    End If
+  Next
 
 End Sub
 
 
 Private Sub SetupClusterNetwork(strProcess, strClusterGroup, strResourceName, strNetworkName)
   Call DebugLog("SetupClusterNetwork:")
-  Dim arrClusterNodes
-  Dim objClusterNode
   Dim strDNSName, strNetAddress
 
 ' Create Network Name
@@ -366,14 +387,6 @@ Private Sub SetupClusterNetwork(strProcess, strClusterGroup, strResourceName, st
     strCmd          = strCmd & " /PRIV NAME=""" & strDNSName & """"
   End If
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
-
-' Remove other nodes from Network Name ownership list
-  Set arrClusterNodes = GetClusterNodes()
-  For Each objClusterNode In arrClusterNodes
-    If UCase(objClusterNode.Name) <> strServer Then
-      Call RemoveOwner(strNetworkName, objClusterNode.Name)
-    End If
-  Next
 
 ' Add IPV4 Address
   If strClusIPV4Network <> "" Then
@@ -947,8 +960,12 @@ Sub AddChildNode(strProcess, strResourceName)
   Call FBManageCluster.AddChildNode(strProcess, strResourceName)
 End Sub
 
+Function CheckClusterHost()
+  CheckClusterHost  = FBManageCluster. CheckClusterHost()
+End Function
+
 Function GetAddress(strAddress, strFormat, strPreserve)
-  GetAddress = FBManageCluster.GetAddress(strAddress, strFormat, strPreserve)
+  GetAddress        = FBManageCluster.GetAddress(strAddress, strFormat, strPreserve)
 End Function
 
 Function GetClusterGroups()

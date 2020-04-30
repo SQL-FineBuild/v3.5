@@ -22,11 +22,11 @@ Dim strErrSave, strResponseYes, strResponseNo
 
 Class FBUtilsClass
 
-Dim objADOCmd, objADOConn, objAutoUpdate, objFile, objFSO, objShell, objWMI, objWMIReg
+Dim objAutoUpdate, objFile, objFSO, objShell, objWMI, objWMIReg
 Dim colPrcEnvVars
-Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
-Dim strBuiltinDom, strClusterName, strCmd, strCmdPS, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA
-Dim strIsInstallDBA, strNTAuth, strOSVersion
+Dim intIdx
+Dim strCmd, strCmdPS, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA
+Dim strIsInstallDBA, strOSVersion
 Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools
 Dim strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum, strUserAccount, strWaitShort
 
@@ -34,8 +34,6 @@ Dim strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum,
 Private Sub Class_Initialize
   Call DebugLog("FBUtils Class_Initialize:")
 
-  Set objADOConn    = CreateObject("ADODB.Connection")
-  Set objADOCmd     = CreateObject("ADODB.Command")
   Set objAutoUpdate = CreateObject("Microsoft.Update.AutoUpdate")
   Set objFSO        = CreateObject("Scripting.FileSystemObject")
   Set objShell      = CreateObject("Wscript.Shell")
@@ -45,10 +43,8 @@ Private Sub Class_Initialize
 
   intErrSave        = 0
   strErrSave        = ""
-  strBuiltinDom     = ""
 
   If strProcessIdCode <> "FBCV" Then
-    strClusterName    = GetBuildfileValue("ClusterName")
     strCmdPS          = GetBuildfileValue("CmdPS")
     strCmdSQL         = GetBuildfileValue("CmdSQL")
     strDirSystemDataBackup = GetBuildfileValue("DirSystemDataBackup")
@@ -66,10 +62,6 @@ Private Sub Class_Initialize
     strWaitShort      = GetBuildfileValue("WaitShort")
     Call SetHKLMSQL()
   End If
-
-  objADOConn.Provider            = "ADsDSOObject"
-  objADOConn.Open "ADs Provider"
-  Set objADOCmd.ActiveConnection = objADOConn
 
 End Sub
 
@@ -99,41 +91,6 @@ Sub BackupDBMasterKey(strDB, strPassword)
   Call Util_ExecSQL(strCmdSQL & "-d """ & strDB & """ -Q", """BACKUP MASTER KEY TO FILE='" & strPathNew & "' ENCRYPTION BY PASSWORD='" & strPassword & "';""", 0)
 
 End Sub
-
-
-Function FormatAccount(strAccount)
-  Call DebugLog("FormatAccount: " & strAccount)
-  Dim strFmtAccount
-
-  If strBuiltinDom = "" Then
-    strBuiltinDom   = GetBuildfileValue("BuiltinDom")
-    intBuiltinDomLen  = Len(strBuiltinDom) + 1
-    strNTAuth       = GetBuildfileValue("NTAuth")
-    intNTAuthLen    = Len(strNTAuth) + 1
-    intServerLen    = Len(strServer) + 1
-  End If
-
-  Select Case True
-    Case Left(strAccount, intNTAuthLen) = strNTAuth & "\"
-      strFmtAccount = Mid(strAccount, intNTAuthLen + 1)
-    Case Left(strAccount, intServerLen) = strServer & "\"
-      strFmtAccount = Mid(strAccount, intServerLen + 1)
-    Case Left(strAccount, intBuiltinDomLen) = strBuiltinDom & "\"
-      strFmtAccount = Mid(strAccount, intBuiltinDomLen + 1)
-    Case Else
-      strFmtAccount = strAccount
-  End Select
-
-  Select Case True
-    Case strFmtAccount = strServer
-      strFmtAccount = strFmtAccount & "$"
-    Case strFmtAccount = strClusterName
-      strFmtAccount = strFmtAccount & "$"
-  End Select
-
-  FormatAccount     = strFmtAccount
-
-End Function
 
 
 Function FormatFolder(strFolder)
@@ -199,183 +156,6 @@ Function FormatServer(strServer, strProtocol)
   End If
 
   FormatServer      = strServerWork
-
-End Function
-
-
-Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
-  Call DebugLog("GetAccountAttr: " & strUserAccount & ", " & strUserAttr)
-  Dim objACE, objAttr, objDACL, objField, objRecordSet
-  Dim strAccount,strAttrObject, strAttrItem, strAttrList, strAttrValue
-  Dim intIdx
- 
-  strAttrValue      = ""
-  strAccount        = FormatAccount(strUserAccount)
-  intIdx            = Instr(strAccount, "\")
-  Select Case True
-    Case intIdx > 0
-      strAccount    = Mid(strAccount, intIdx  + 1)
-    Case StrComp(strAccount, strServer, vbTextCompare) = 0
-      strAccount    = strAccount & "$"
-    Case StrComp(strAccount, strClusterName, vbTextCompare) = 0
-      strAccount    = strAccount & "$"
-   End Select
-
-  On Error Resume Next 
-  objADOCmd.CommandText          = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName," & strUserAttr
-  Set objRecordSet  = objADOCmd.Execute
-
-  On Error Goto 0
-  Select Case True
-    Case Not IsObject(objRecordset)
-      ' Nothing
-    Case objRecordset Is Nothing
-      ' Nothing
-    Case IsNull(objRecordset)
-      ' Nothing
-    Case objRecordset.RecordCount = 0 
-      ' Nothing
-    Case IsNull(objRecordset.Fields(1).Value)
-      ' Nothing
-    Case strUserAttr = "msDS-GroupMSAMembership"
-      Set objField  = GetObject("LDAP://" & objRecordset.Fields(0).Value)
-      Set objAttr   = objField.Get("msDS-GroupMSAMembership")
-      Set objDACL   = objAttr.DiscretionaryAcl
-      strAttrValue  = "> "
-      For Each objACE In objDACL
-        strAttrValue = strAttrValue & objACE.Trustee & " "
-      Next
-    Case Instr(strUserAttr, "SID") > 0
-      strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
-      strAttrValue  = HexStrToSIDStr(strAttrValue)
-    Case Instr(strUserAttr, "GUID") > 0
-      strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
-      strAttrValue  = HexStrToGUID(strAttrValue)
-    Case strUserAttr = "memberOf"
-      strAttrList   = ""
-      For Each strAttrItem In objRecordset.Fields(1).Value
-        strAttrList = strAttrList & Mid(strAttrItem, 4, Instr(strAttrItem, ",") - 4) & " "
-      Next
-      strAttrValue = RTrim(strAttrList)
-    Case Else
-      strAttrValue  = objRecordset.Fields(1).Value
-  End Select
-
-  err.Number        = 0
-  GetAccountAttr    = strAttrValue
-
-End Function
-
-
-Private Function OctetToHexStr(strValue)
-  Dim strHexStr
-  Dim intIdx
-
-  strHexStr         = ""
-  For intIdx = 1 To Lenb(strValue)
-    strHexStr       = strHexStr & Right("0" & Hex(Ascb(Midb(strValue, intIdx, 1))), 2)
-  Next
-
-  OctetToHexStr     = strHexStr
-
-End Function
-
-
-Private Function HexStrToGUID(strValue)
-  Dim strGUID
-
-  strGUID           = ""
-
-  If Len(strValue) = 32 Then
-    strGUID         = strGUID & Mid(strValue,  7, 2) & Mid(strValue,  5, 2) & Mid(strValue,  3, 2) & Mid(strValue,  1, 2) & "-"
-    strGUID         = strGUID & Mid(strValue, 11, 2) & Mid(strValue,  9, 2) & "-"
-    strGUID         = strGUID & Mid(strValue, 15, 2) & Mid(strValue, 13, 2) & "-"
-    strGUID         = strGUID & Mid(strValue, 17, 2) & Mid(strValue, 19, 2) & "-"
-    strGUID         = strGUID & Mid(strValue, 21)
-  End If
-
-  HexStrToGUID      = strGUID
-
-End Function
-
-
-Private Function HexStrToSIDStr(strValue)
-  Dim arrSID
-  Dim strSIDStr
-  Dim intIdx, intUB, intWork
-
-  intUB             = (Len(strValue) / 2) - 1
-  ReDim arrSID(intUB)  
-  For intIdx = 0 To intUB
-    arrSID(intIdx)  = CInt("&H" & Mid(strValue, (intIdx * 2) + 1, 2))
-  Next
-
-  strSIDStr         = "S-" & arrSID(0) & "-" & arrSID(1) & "-" & arrSID(8)
-  If intUB >= 15 Then
-    intWork         = arrSID(15)
-    intWork         = (intWork * 256) + arrSID(14)
-    intWork         = (intWork * 256) + arrSID(13)
-    intWork         = (intWork * 256) + arrSID(12)
-    strSIDStr       = strSIDStr & "-" & CStr(intWork)
-    If intUB >= 22 Then
-      intWork       = arrSID(19)
-      intWork       = (intWork * 256) + arrSID(18)
-      intWork       = (intWork * 256) + arrSID(17)
-      intWork       = (intWork * 256) + arrSID(16)
-      strSIDStr     = strSIDStr & "-" & CStr(intWork)
-      intWork       = arrSID(23)
-      intWork       = (intWork * 256) + arrSID(22)
-      intWork       = (intWork * 256) + arrSID(21)
-      intWork       = (intWork * 256) + arrSID(20)
-      strSIDStr     = strSIDStr & "-" & CStr(intWork)
-    End If
-    If intUB >= 25 Then
-      intWork       = arrSID(25)
-      intWork       = (intWork * 256) + arrSID(24)
-      strSIDStr     = strSIDStr & "-" & CStr(intWork)
-    End If
-  End If
-
-  HexStrToSIDStr    = strSIDStr
-
-End Function
-
-
-Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
-  Call DebugLog("GetOUAttr: " & strOUPath & ", " & strOUAttr)
-  Dim objOU
-  Dim arrOUPath
-  Dim strAttrValue, strOUCName, strCName
-
-  arrOUPath         = Split(Replace("OU=" & strOUPath, ".", ".OU="), ".")
-  strOUCName        = Replace("DC=" & strUserDNSDomain, ".", ",DC=")
-  For Each strCName In arrOUPath
-    strOUCName      = strCName & "," & strOUCName
-  Next
-  Call DebugLog("OU CName: " & strOUCName)
-
-  On Error Resume Next 
-  Set objOU         = GetObject("LDAP://" & strOUCName)
-
-  On Error Goto 0
-  strAttrValue      = ""
-  Select Case True
-    Case Not IsObject(objOU)
-      ' Nothing
-    Case objOU Is Nothing
-      ' Nothing
-    Case IsNull(objOU)
-      ' Nothing
-    Case Instr(strUserAttr, "GUID") > 0
-      strAttrValue  = objOU.Get(strOUAttr)
-      strAttrValue  = OctetToHexStr(strAttrValue)
-      strAttrValue  = HexStrToGUID(strAttrValue)
-    Case Else
-      strAttrValue  = objOU.Get(strOUAttr)
-  End Select
-
-  err.Number        = 0
-  GetOUAttr         = strAttrValue
 
 End Function
 
@@ -709,64 +489,6 @@ Sub SetParam(strParamName, strParam, strNewValue, strMessage, ByRef strList)
 End Sub
 
 
-Sub SetRegPerm(strRegParm, strName, strAccess)
-  Call DebugLog("SetRegPerm: " & strRegParm & " for " & strName)
-  ' Code based on example posted by ROHAM on www.tek-tips.com/viewthread.cfm?qid=1456390
-  Dim objACE, objDACL, objSD, objSDUtil
-  Dim strACEAccessAllow, strACEFullControl, strACEPropogate, strACERead, strPath, strRegKey, strSDFormatIID, strSDPathRegistry, strStatusKB933789, strTrusteeName
-
-  strPath           = "SOFTWARE\Microsoft\Updates\Windows Server 2003\SP3\KB933789\"
-  objWMIReg.GetStringValue strHKLM,strPath,"Description",strStatusKB933789
-  Select Case True
-    Case GetBuildfileValue("OSVersion") >= "6.0"
-      ' Nothing
-    Case Instr(Ucase(GetBuildfileValue("OSName")), " XP") > 0
-      ' Nothing
-    Case strStatusKB933789 > ""
-      ' Nothing
-    Case Else
-      Call DebugLog("SetRegPerm bypassed")
-      Exit Sub
-  End Select
-
-  strACEAccessAllow = 0
-  strACEFullControl = &h10000000
-  strACEPropogate   = &h2
-  strACERead        = &h80000000
-  strSDFormatIID    = 1
-  strSDPathRegistry = 3
-  strRegKey         = strRegParm
-  If Right(strRegKey, 1) = "\" Then
-    strRegKey       = Left(strRegKey, Len(strRegKey) - 1)
-  End If
-
-  strTrusteeName    = FormatAccount(strName)
-  Set objSDUtil     = CreateObject("ADsSecurityUtility")
-  Set objSD         = objSDUtil.GetSecurityDescriptor(strRegKey, strSDPathRegistry, strSDFormatIID)
-  objSD.Owner       = GetBuildfileValue("LocalAdmin")
-  Set objDACL       = objSD.DiscretionaryAcl
-  Set objACE        = CreateObject("AccessControlEntry")
-  objACE.Trustee    = strTrusteeName
-  Select Case True
-    Case strAccess = "F"
-      objACE.AccessMask = strACEFullControl
-    Case Else
-      objACE.AccessMask = strACERead
-  End Select
-  objACE.ACEType    = strACEAccessAllow
-  objACE.ACEFlags   = strACEPropogate
-  objDACL.AddAce objACE
-
-  objSDUtil.SetSecurityDescriptor strRegKey, strSDPathRegistry, objSD, strSDFormatIID
-
-  Set objACE        = Nothing
-  Set objDACL       = Nothing
-  Set objSD         = Nothing
-  Set objSDUtil     = Nothing
-
-End Sub
-
-
 Sub SetUpdate(strOnOff)
   Call DebugLog("SetUpdate: messages " & strOnOff)
   On Error Resume Next
@@ -1051,14 +773,9 @@ Sub BackupDBMasterKey(strDB, strPassword)
   Call FBUtils.BackupDBMasterKey(strDB, strPassword)
 End Sub
 
-
 Sub CopyFile(strSource, strTarget)
   Call FBUtils.CopyFile(strSource, strTarget)
 End Sub
-
-Function FormatAccount(strAccount)
-  FormatAccount     = FBUtils.FormatAccount(strAccount)
-End Function
 
 Function FormatFolder(strFolder)
   FormatFolder      = FBUtils.FormatFolder(strFolder)
@@ -1072,16 +789,8 @@ Function FormatServer(strServer, strProtocol)
   FormatServer      = FBUtils.FormatServer(strServer, strProtocol)
 End Function
 
-Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
-  GetAccountAttr    = FBUtils.GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
-End Function
-
 Function GetCmdSQL()
   GetCmdSQL         = FBUtils.GetCmdSQL()
-End Function
-
-Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
-  GetOUAttr         = FBUtils.GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
 End Function
 
 Function Max(intA, intB)
@@ -1114,10 +823,6 @@ End Sub
 
 Sub SetUpdate(strOnOff)
   Call FBUtils.SetUpdate(strOnOff)
-End Sub
-
-Sub SetRegPerm(strRegParm, strName, strAccess)
-  Call FBUtils.SetRegPerm(strRegParm, strName, strAccess)
 End Sub
 
 Function GetXMLParm(objParm, strParm, strDefault)

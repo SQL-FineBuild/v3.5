@@ -25,7 +25,7 @@ Dim strSetupLog, strStatusBypassed, strStatusComplete, strStatusFail, strStatusM
 
 Class FBManageLogClass
 Dim objFSO, objShell 
-Dim strLogTxt, strStopAt
+Dim strLogTxt, strRestart, strStopAt
 
 
 Private Sub Class_Initialize
@@ -234,6 +234,7 @@ Private Sub LogSetup()
       strDebug           = GetBuildfileValue("Debug")
       strProcessId       = GetBuildfileValue("ProcessId")
       strProcessIdLabel  = GetBuildfileValue("ProcessId")
+      strRestart         = GetBuildfileValue("RestartSave")
       strStatusBypassed  = GetBuildFileValue("StatusBypassed")
       strStatusComplete  = GetBuildFileValue("StatusComplete")
       strStatusFail      = GetBuildfileValue("StatusFail")
@@ -355,9 +356,16 @@ Sub ProcessEnd(strStatus)
     Call LogWrite(" " & strProcessIdDesc & strStatus)
   End If
 
-  If (strStopAt = "AUTO") Or (strStopAt <> "" And strStopAt <= strProcessIdLabel) Then
-    err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
-  End If
+  Select Case True
+    Case strRestart < strProcessIdLabel
+      ' Nothing
+    Case strStopat = ""
+      ' Nothing
+    Case strStopAt = "AUTO"
+      err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
+    Case strStopAt >= strProcessIdLabel
+      err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
+  End Select
 
 End Sub
 
