@@ -149,6 +149,9 @@ Sub LogClose()
   Call SetBuildfileValue("FBParm",             strCmd)
   Call SetBuildfileValue("FBParmOld",          "")
 
+  Call SetBuildfileValue("AuditEndDate",       Cstr(Date()))
+  Call SetBuildfileValue("AuditEndTime",       Cstr(Time()))
+
 End Sub
 
 
@@ -363,7 +366,7 @@ Sub ProcessEnd(strStatus)
       ' Nothing
     Case strStopAt = "AUTO"
       err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
-    Case strStopAt >= strProcessIdLabel
+    Case strStopAt <= strProcessIdLabel
       err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
   End Select
 

@@ -279,9 +279,9 @@ Sub ProcessUser(strLabel, strDescription, strProcess)
             strCmd  = strProgReg & " UNLOAD  ""HKLM\FBTempProf"""
             Call Util_RunExec(strCmd, "", strResponseYes, 1)
           Case intErrSave = 1
-            ' Nothing
+            Call DebugLog("Processing bypassed for " & objFolder.Path)
           Case intErrSave = 1332
-            ' Nothing
+            Call DebugLog("Processing bypassed for " & objFolder.Path)
           Case Else
             Call SetBuildMessage(strMsgError, "Error " & Cstr(intErrSave) & " " & strErrSave & " returned by " & strCmd)
         End Select

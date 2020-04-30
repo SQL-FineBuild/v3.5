@@ -257,8 +257,24 @@ Function GetPrimaryNode(strGroup)
 End Function
 
 
-Sub MoveToGroup(strClusterGroup, strNode)
-  Call DebugLog("MoveToGroup: " & strClusterGroup)
+Function GetStorageGroup(strGroupDefault)
+  Call DebugLog("GetStorageGroup:")
+
+  Select Case True
+    Case strOSVersion < "6.2"
+      GetStorageGroup = strGroupDefault
+      strCmd        = "CLUSTER """ & strClusterName & """ GROUP """ & GetStorageGroup & """ /CREATE"
+      Call Util_RunExec(strCmd, "", strResponseYes, 5010)
+    Case Else
+      objWMIReg.GetStringValue strHKLM,"Cluster\","AvailableStorage",strPath
+      objWMIReg.GetStringValue strHKLM,"Cluster\Groups\" & strPath & "\","Name",GetStorageGroup
+  End Select
+
+End Function
+
+
+Sub MoveToNode(strClusterGroup, strNode)
+  Call DebugLog("MoveToNode: " & strClusterGroup)
   Dim strNewNode
 
   Select Case True
@@ -269,7 +285,16 @@ Sub MoveToGroup(strClusterGroup, strNode)
   End Select
 
   strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /MOVETO:""" & strNewNode & """ "
-  Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  Call Util_RunExec(strCmd, "", strResponseYes, -1)
+  If intErrSave <> 0 Then
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
+    Wscript.Sleep strWaitLong
+    Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  End If
 
 End Sub
 
@@ -298,7 +323,7 @@ Sub SetOwnerNode(strClusterGroup)
   If strPreferredOwner = strServer Then
     strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /SETOWNERS:""" & strServer & """ "
     Call Util_RunExec(strCmd, "", strResponseYes, 0)
-    Call MoveToGroup(strClusterGroup, "")
+    Call MoveToNode(strClusterGroup, "")
   End If
 
 End Sub
@@ -321,7 +346,7 @@ Private Sub SetupClusterGroup(strClusterGroup, strPriority)
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
 
   Call SetResourceOff(strClusterGroup, "GROUP")
-  Call MoveToGroup(strClusterGroup, "")
+  Call MoveToNode(strClusterGroup, "")
 
   If strOSVersion >= "6.2" Then
     strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /PROP Priority=" & strPriorityValue
@@ -782,7 +807,7 @@ Private Sub MoveClusterVolume(strClusterGroup, strResourceName, strVolList)
   Dim strVolLabel, strVolParam, strVolSource, strVolType
   Dim intVol
 
-  Call MoveToGroup(strClusStorage, "")
+  Call MoveToNode(strClusStorage, "")
 
   arrVolumes        = Split(strVolList, " ")
   strFailoverClusterDisks = GetBuildfileValue("FailoverClusterDisks")
@@ -923,6 +948,24 @@ Sub SetResourceOn(strResource, strResourceType)
 End Sub
 
 
+Sub SetResourceAllOn()
+  Call DebugLog("SetResourceAllOn:")
+
+  Set colResources  = GetClusterResources()
+  For Each objResource In colResources
+    Select Case True
+      Case objResource.State = 0 ' Resource Inherited
+        ' Nothing
+      Case objResource.State = 2 ' Resource Operational
+        ' Nothing
+      Case Else
+        Call SetResourceOn(objResource.Name, "")
+    End Select
+  Next
+
+End Sub
+
+
 Sub SetVolumeDependency(strResourceName, strVolParam)
   Call DebugLog("SetVolumeDependency: " & strVolParam & " for " & strResourceName)
   Dim strVolName, strVolLabel
@@ -996,8 +1039,12 @@ Function GetPrimaryNode(objResource)
   GetPrimaryNode    = FBManageCluster.GetPrimaryNode(objResource)
 End Function
 
-Sub MoveToGroup(strClusterGroup, strNode)
-  Call FBManageCluster.MoveToGroup(strClusterGroup, strNode)
+Function GetStorageGroup(strGroupDefault)
+  GetStorageGroup   = FBManageCluster.GetStorageGroup(strGroupDefault)
+End Function
+
+Sub MoveToNode(strClusterGroup, strNode)
+  Call FBManageCluster.MoveToNode(strClusterGroup, strNode)
 End Sub
 
 Sub RemoveOwner(strResourceName, strOwnerNode)
@@ -1014,6 +1061,10 @@ End Sub
 
 Sub SetResourceOn(strResource, strResourceType)
   Call FBManageCluster.SetResourceOn(strResource, strResourceType)
+End Sub
+
+Sub SetResourceAllOn()
+  Call FBManageCluster.SetResourceAllOn()
 End Sub
 
 Sub SetVolumeDependency(strResourceName, strVolParam)
