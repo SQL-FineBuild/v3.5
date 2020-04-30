@@ -67,6 +67,7 @@ IF '%SQLDEBUG%' NEQ '' SET SQLFBDEBUG=ECHO
 %SQLFBDEBUG% %TIME:~0,8% ConfigVar: ProcessId (Refresh %SQLPROCESSID)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:ProcessId %SQLFBPARM% %SQLDEBUG%`) DO (SET SQLPROCESSID=%%X)
 SET SQLRC=%ERRORLEVEL%
+%SQLFBDEBUG% ProcessId label: '%SQLPROCESSID%'
 IF %SQLRC% == 1 SET SQLRC=0
 IF %SQLRC% NEQ 0 ECHO Process ProcessId var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
