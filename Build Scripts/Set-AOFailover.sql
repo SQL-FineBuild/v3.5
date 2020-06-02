@@ -303,7 +303,7 @@ BEGIN;
       JOIN @AGServers ag ON ag.AGName LIKE p.AGName AND ag.TargetServer = 'Y'
       JOIN [master].[sys].[dm_hadr_database_replica_states] drs ON drs.replica_id = ag.Primary_Id 
       JOIN [master].[sys].[databases] d ON d.database_id = drs.database_id
-      WHERE drs.synchronization_state_desc <> 'SYNCHRONIZED' OR drs.log_send_queue_size > 0;
+      WHERE drs.synchronization_state_desc NOT IN ('SYNCHRONIZED','SYNCHRONIZING') OR drs.log_send_queue_size > 0;
       SELECT
        @NonSync     = CASE WHEN p.Force = 'Y' THEN 0 ELSE @@ROWCOUNT END
       FROM @Parameters p;
@@ -335,7 +335,7 @@ BEGIN;
       JOIN @AGServers ag ON ag.AGName LIKE p.AGName AND ag.TargetServer = 'Y'
       JOIN [master].[sys].[dm_hadr_database_replica_states] drs ON drs.replica_id = ag.Secondary_Id
       JOIN [master].[sys].[databases] d ON d.database_id = drs.database_id
-      WHERE drs.synchronization_state_desc <> 'SYNCHRONIZED' OR drs.redo_queue_size > 0;
+      WHERE drs.synchronization_state_desc NOT IN ('SYNCHRONIZED','SYNCHRONIZING') OR drs.redo_queue_size > 0;
       SELECT
        @NonSync     = CASE WHEN p.Force = 'Y' THEN 0 ELSE @@ROWCOUNT END
       FROM @Parameters p;
