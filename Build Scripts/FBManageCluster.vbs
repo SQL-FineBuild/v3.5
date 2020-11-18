@@ -217,38 +217,25 @@ Function GetClusterResources()
 End Function
 
 
-Function GetPrimaryNode(strGroup)
-  Call DebugLog("GetPrimaryNode: " & strGroup)
-  Dim colClusGroups, colClusResources, colOwnerNodes
-  Dim objClusGroup, objClusResource, objOwnerNode
-  Dim strPrimaryNode, strTypeList
+Function GetPrimaryNode(strNetwork)
+  Call DebugLog("GetPrimaryNode: " & strNetwork)
+  Dim colClusResources,colOwnerNodes
+  Dim objClusResource,objOwnerNode
+  Dim strPrimaryNode
 
   strPrimaryNode    = ""
-  strTypeList       = "'SQL Server Agent' 'Generic Service' 'SQL Server' 'Distributed Transaction Coordinator' 'SQL Server Availability Group'"
-  Set colClusGroups = GetClusterGroups()
-  For Each objClusGroup In colClusGroups
-    If objClusGroup.Name = strGroup Then
-      Set colClusResources = objClusGroup.Resources
-      For Each objClusResource In colClusResources
-        Set colOwnerNodes = objClusResource.PossibleOwnerNodes
-        For Each objOwnerNode In colOwnerNodes
-          Select Case True
-            Case InStr(strTypeList, "'" & objClusResource.TypeName & "'") = 0
-              ' Nothing
-            Case objOwnerNode.State <> 0
-              ' Nothing
-            Case Else
-              strPrimaryNode  = UCase(objOwnerNode.Name)
-              Exit For
-          End Select
-        Next
-        If strPrimaryNode <> "" Then
-          Exit For
-        End If
-      Next
-      If strPrimaryNode <> "" Then
+  Set colClusResources = objClusGroup.Resources
+  For Each objClusResource In colClusResources
+    If UCase(objClusResource.Name) = UCase(strNetwork) Then
+      Set colOwnerNodes = objClusResource.PossibleOwnerNodes
+      For Each objOwnerNode In colOwnerNodes
+        Call DebugLog("Resource: " & objClusResource.Name & ", Owner: " & objOwnerNode.Name)
+        strPrimaryNode = UCase(objOwnerNode.Name)
         Exit For
-      End If
+      Next
+    End If
+    If strPrimaryNode <> "" Then
+      Exit For
     End If
   Next
 
@@ -514,8 +501,10 @@ Function GetAddress(strAddress, strFormat, strPreserve)
     strUserDNSServer  = GetBuildfileValue("UserDNSServer")
     strOSVersion      = GetBuildfileValue("OSVersion")
     strWaitLong       = GetBuildfileValue("WaitLong")
-    strDebugMsg1      = "DNS Server: " & strUserDNSServer
-    Set objWMIDNS     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\" & strUserDNSServer & "\root\MicrosoftDNS")
+    If strUserDNSServer <> "" Then
+      strDebugMsg1    = "DNS Server: " & strUserDNSServer
+      Set objWMIDNS   = GetObject("winmgmts:{impersonationLevel=impersonate}!\\" & strUserDNSServer & "\root\MicrosoftDNS")
+    End If
   End If
 
   objRE.Pattern     = "^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"

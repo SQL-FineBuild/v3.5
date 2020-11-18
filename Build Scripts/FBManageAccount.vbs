@@ -123,7 +123,8 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
       Set objDACL   = objAttr.DiscretionaryAcl
       strAttrValue  = "> "
       For Each objACE In objDACL
-        strAttrValue = strAttrValue & objACE.Trustee & " "
+        strAttrItem  = objACE.Trustee
+        strAttrValue = strAttrValue & strAttrItem & " "
       Next
     Case Instr(strUserAttr, "SID") > 0
       strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
@@ -151,9 +152,15 @@ Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
   Call DebugLog("GetOUAttr: " & strOUPath & ", " & strOUAttr)
   Dim objOU
   Dim arrOUPath
-  Dim strAttrValue, strOUCName, strCName
+  Dim strAttrValue, strOUCName, strCName, strDelim
 
-  arrOUPath         = Split(Replace("OU=" & strOUPath, ".", ".OU="), ".")
+  Select Case True
+    Case Instr(strOUPath, "/") > 0
+      strDelim      = "/"
+    Case Else
+      strDelim      = "."
+  End Select
+  arrOUPath         = Split(Replace("OU=" & strOUPath, strDelim, ".OU="), ".")
   strOUCName        = Replace("DC=" & strUserDNSDomain, ".", ",DC=")
   For Each strCName In arrOUPath
     strOUCName      = strCName & "," & strOUCName

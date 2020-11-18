@@ -14,6 +14,8 @@ BEGIN;
     ,START_DATE='2000/01/01'
     ,EXPIRY_DATE='2999/12/31';
 
+  WAITFOR DELAY "00:00:01"
+
   BACKUP CERTIFICATE [StartJobProxy] 
    TO FILE='$(strDirSystemDataShared)StartJobProxy.cer'
    WITH PRIVATE KEY (
