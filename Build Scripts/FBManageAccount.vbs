@@ -87,8 +87,9 @@ End Function
 Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
   Call DebugLog("GetAccountAttr: " & strUserAccount & ", " & strUserAttr)
   Dim objACE, objAttr, objDACL, objField, objRecordSet
-  Dim strAccount,strAttrObject, strAttrItem, strAttrList, strAttrValue
+  Dim strAccount,strAttrObject, strAttrItem, strAttrList, strAttrValue, strSearchAttr
  
+  strAttrItem       = ""
   strAttrValue      = ""
   strAccount        = FormatAccount(strUserAccount)
   intIdx            = Instr(strAccount, "\")
@@ -99,10 +100,17 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
       strAccount    = strAccount & "$"
     Case StrComp(strAccount, strClusterName, vbTextCompare) = 0
       strAccount    = strAccount & "$"
-   End Select
+  End Select
+
+  Select Case True
+    Case strUserAttr = "msDS-GroupMSAMembership"
+      strSearchAttr = "msDS-ManagedPasswordId," & strUserAttr
+    Case Else
+      strSearchAttr = strUserAttr
+  End Select
 
   On Error Resume Next 
-  objADOCmd.CommandText          = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName," & strUserAttr
+  objADOCmd.CommandText          = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName," & strSearchAttr
   Set objRecordSet  = objADOCmd.Execute
 
   On Error Goto 0
@@ -115,17 +123,25 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
       ' Nothing
     Case objRecordset.RecordCount = 0 
       ' Nothing
+    Case strUserAttr = "msDS-GroupMSAMembership"
+      Select Case True
+        Case IsNull(objRecordset.Fields(1).Value) ' ManagedPasswordId only present for gMSA
+          ' Nothing
+        Case IsNull(objRecordset.Fields(2).Value) ' Empty msDS-GroupMSAMembership
+          strAttrValue = "> "
+        Case Else
+          strAttrValue   = "> " 
+          Set objField   = GetObject("LDAP://" & objRecordset.Fields(0).Value)
+          Set objField   = GetObject("LDAP://" & objRecordset.Fields(0).Value)  
+          Set objAttr    = objField.Get("msDS-GroupMSAMembership")
+          Set objDACL    = objAttr.DiscretionaryAcl
+          For Each objACE In objDACL
+            strAttrItem  = objACE.Trustee
+            strAttrValue = strAttrValue & strAttrItem & " "
+          Next
+      End Select
     Case IsNull(objRecordset.Fields(1).Value)
       ' Nothing
-    Case strUserAttr = "msDS-GroupMSAMembership"
-      Set objField  = GetObject("LDAP://" & objRecordset.Fields(0).Value)
-      Set objAttr   = objField.Get("msDS-GroupMSAMembership")
-      Set objDACL   = objAttr.DiscretionaryAcl
-      strAttrValue  = "> "
-      For Each objACE In objDACL
-        strAttrItem  = objACE.Trustee
-        strAttrValue = strAttrValue & strAttrItem & " "
-      Next
     Case Instr(strUserAttr, "SID") > 0
       strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
       strAttrValue  = HexStrToSIDStr(strAttrValue)
