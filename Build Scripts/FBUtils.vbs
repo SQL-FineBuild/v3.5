@@ -22,7 +22,7 @@ Dim strErrSave, strResponseYes, strResponseNo
 
 Class FBUtilsClass
 
-Dim objAutoUpdate, objFile, objFSO, objShell, objWMI, objWMIReg
+Dim objAutoUpdate, objFile, objFSO, objFW, objFWRules, objShell, objWMI, objWMIReg
 Dim colPrcEnvVars
 Dim intIdx
 Dim strCmd, strCmdPS, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA
@@ -36,6 +36,8 @@ Private Sub Class_Initialize
 
   Set objAutoUpdate = CreateObject("Microsoft.Update.AutoUpdate")
   Set objFSO        = CreateObject("Scripting.FileSystemObject")
+  Set objFW         = CreateObject("HNetCfg.FwPolicy2")
+  Set objFWRules    = objFW.Rules
   Set objShell      = CreateObject("Wscript.Shell")
   Set objWMI        = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\cimv2")
   Set objWMIReg     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\default:StdRegProv")
@@ -444,6 +446,109 @@ Sub SetDCOMSecurity(strAppId)
 End Sub
 
 
+Sub SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
+  Call DebugLog("SetFWRule: " & strFWName & " for " & strFWPort)
+
+  Select Case True
+    Case Left(strOSVersion, 1) < "6"
+      Call SetFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
+    Case Else
+      Call SetAdvFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
+  End Select
+
+End Sub
+
+
+Private Sub SetFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
+  Call DebugLog("SetFirewall:")
+  Dim strRuleExist, strRuleType
+  
+  strRuleExist      = CheckFWName(strFWName)
+  Select Case True
+    Case strFWProgram <> ""
+      strRuleType   = "ALLOWEDPROGRAM"
+    Case Else
+      strRuleType   = "PORTOPENING"
+  End Select
+
+  Select Case True
+    Case strFirewallStatus <> "1"
+      ' Nothing
+    Case strRuleExist = False
+      strCmd        = "NETSH FIREWALL ADD " & strRuleType & " NAME=""" & strFWName & """ "
+      strCmd        = strCmd & "MODE=ENABLE SCOPE=ALL PROFILE=DOMAIN "
+      If strFWType <> "" Then
+        strCmd      = strCmd & "PROTOCOL=" & strFWType & " "
+      End If
+      If strFWPort <> "" Then
+        strCmd      = strCmd & "PORT=" & Replace(strFWPort, " ", "") & " "
+      End If
+      If strFWProgram <> "" Then
+        strCmd      = strCmd & "PROGRAM=""" & strFWProgram & """ "
+      End If
+      Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  End Select
+
+  If (strRuleExist = True) Or (strFWEnable = "Y") Then
+    strCmd          = "NETSH FIREWALL SET NAME=""" & strFWName & """ "
+    strCmd          = strCmd & "PROFILE=DOMAIN MODE=ENABLE  "
+'    Call Util_RunExec(strCmd, "", strResponseYes, 0) verify syntax correct before enabling command
+  End If
+
+End Sub
+
+
+Private Sub SetAdvFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
+  Call DebugLog("SetAdvFirewall:")
+  Dim strRuleExist
+
+  strRuleExist      = CheckFWName(strFWName)
+
+  If strRuleExist = False Then 
+    strCmd          = "NETSH ADVFIREWALL FIREWALL ADD RULE NAME=""" & strFWName & """ "
+    strCmd          = strCmd & "ACTION=ALLOW PROFILE=DOMAIN "
+    If strFWDesc <> "" Then
+      strCmd        = strCmd & "DESCRIPTION=""" & strFWDesc & """ "
+    End If
+    If strFWType <> "" Then
+      strCmd        = strCmd & "PROTOCOL=" & strFWType & " "
+    End If
+    If strFWDir <> "" Then
+      strCmd        = strCmd & "DIR=" & strFWDir & " "
+    End If
+    If strFWPort <> "" Then
+      strCmd        = strCmd & "LOCALPORT=" & Replace(strFWPort, " ", "") & " "
+    End If
+    If strFWProgram <> "" Then
+      strCmd        = strCmd & "PROGRAM=""" & strFWProgram & """ "
+    End If
+    Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  End If
+
+  If (strRuleExist = True) Or (strFWEnable = "Y") Then
+    strCmd          = "NETSH ADVFIREWALL FIREWALL SET RULE NAME=""" & strFWName & """ "
+    strCmd          = strCmd & "NEW PROFILE=DOMAIN ENABLE=YES "
+    Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  End If
+
+End Sub
+
+
+Private Function CheckFWName(strFWName)
+  Call DebugLog("CheckFWName:")
+  Dim objFWRule
+
+  CheckFWName       = False
+  For Each objFWRule In objFWRules
+    If objFWRule.Name = strFWName Then
+      CheckFWName   = True
+      Exit For
+    End If
+  Next
+
+End Function
+
+
 Private Sub SetHKLMSQL()
 
   strHKLMSQL        = "HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\"
@@ -819,6 +924,10 @@ End Sub
 
 Sub SetDCOMSecurity(strAppId)
   Call FBUtils.SetDCOMSecurity(strAppId)
+End Sub
+
+Sub SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
+   Call FBUtils.SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
 End Sub
 
 Sub SetUpdate(strOnOff)

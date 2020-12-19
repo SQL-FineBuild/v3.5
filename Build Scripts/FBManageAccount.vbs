@@ -18,7 +18,7 @@ Option Explicit
 Dim FBManageAccount: Set FBManageAccount = New FBManageAccountClass
 
 Class FBManageAccountClass
-Dim objADOCmd, objADOConn, objFolder, objFSO, objSDUtil, objWMIReg
+Dim objADOCmd, objADOConn, objFolder, objFSO, objRecordSet, objSDUtil, objWMIReg
 Dim arrProfFolders, arrProfUsers
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strHKLM, strHKU, strLocalAdmin, strNTAuth, strProfDir, strProgReg, strServer, strUser
@@ -57,6 +57,31 @@ Private Sub Class_Initialize
 End Sub
 
 
+Private Function CheckGroup(strName, strUserDNSDomain)
+  Call DebugLog("CheckGroup " & strName)
+  Dim strAccountName
+
+  Select Case True
+    Case Instr(strName, "\") > 0
+      strAccountName = Mid(strName, Instr(strName, "\") + 1)
+    Case Instr(strName, "@") > 0
+      strAccountName = Mid(1, strName, Instr(strName, "@") - 1)
+    Case Else
+      strAccountName = strName
+  End Select
+
+  objADOCmd.CommandText = "SELECT Name FROM 'LDAP://" & strUserDNSDomain & "' WHERE objectCategory='group' " & "AND Name='" & strAccountName & "'"
+  Set objRecordSet = objADOCmd.Execute
+
+  Select Case True
+    Case objRecordSet.BOF
+      CheckGroup    = False
+    Case Else
+      CheckGroup    = True
+  End Select
+
+End Function
+
 Function FormatAccount(strAccount)
   Call DebugLog("FormatAccount: " & strAccount)
   Dim strFmtAccount
@@ -86,7 +111,7 @@ End Function
 
 Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
   Call DebugLog("GetAccountAttr: " & strUserAccount & ", " & strUserAttr)
-  Dim objACE, objAttr, objDACL, objField, objRecordSet
+  Dim objACE, objAttr, objDACL, objField
   Dim strAccount,strAttrObject, strAttrItem, strAttrList, strAttrValue, strSearchAttr
  
   strAttrItem       = ""
@@ -131,13 +156,14 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
           strAttrValue = "> "
         Case Else
           strAttrValue   = "> " 
-          Set objField   = GetObject("LDAP://" & objRecordset.Fields(0).Value)
           Set objField   = GetObject("LDAP://" & objRecordset.Fields(0).Value)  
           Set objAttr    = objField.Get("msDS-GroupMSAMembership")
           Set objDACL    = objAttr.DiscretionaryAcl
           For Each objACE In objDACL
             strAttrItem  = objACE.Trustee
-            strAttrValue = strAttrValue & strAttrItem & " "
+            If CheckGroup(strAttrItem, strUserDNSDomain) = True Then
+              strAttrValue = strAttrValue & strAttrItem & " "
+            End If
           Next
       End Select
     Case IsNull(objRecordset.Fields(1).Value)
