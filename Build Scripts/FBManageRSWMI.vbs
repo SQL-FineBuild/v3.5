@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageRSWMI.vbs  
-'  Copyright FineBuild Team © 2018 - 2019.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2018 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Manage RS WMI processes 
 '
@@ -140,7 +140,7 @@ Sub SetRSDirectory(strApplication, strDirectory)
       objRSInParam.Properties_.Item("VirtualDirectory") = strDirectory
       objRSInParam.Properties_.Item("lcid")             = intRSLcid
   End Select
-  Call RunRSWMI(strFunction, "-2147220930 -2147220978 -2147220980") ' OK if Directory already exists
+  Call RunRSWMI(strFunction, "-2147220930 -2147220978 -2147220980 -2147024864") ' OK if Directory already exists
 
   Select Case True
     Case strSQLVersion <= "SQL2005"
