@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageCluster.vbs  
-'  Copyright FineBuild Team © 2018 - 2020.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2018 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Cluster Management Utilities 
 '
@@ -64,7 +64,7 @@ Private Sub Class_Initialize
 End Sub
 
 
-Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strPriority)
+Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strVolReset, strPriority)
   Call DebugLog("BuildCluster: " &strProcess)
   Dim strVolLabel, strVolName
 
@@ -81,7 +81,7 @@ Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, s
   End If
 
   If strVolList <> "" Then
-    Call MoveClusterVolume(strClusterGroup, strResourceName, strVolList)
+    Call MoveClusterVolume(strClusterGroup, strResourceName, strVolList, strVolReset)
   End If
 
 End Sub
@@ -217,16 +217,16 @@ Function GetClusterResources()
 End Function
 
 
-Function GetPrimaryNode(strNetwork)
-  Call DebugLog("GetPrimaryNode: " & strNetwork)
+Function GetPrimaryNode(strResource)
+  Call DebugLog("GetPrimaryNode: " & strResource)
   Dim colClusResources,colOwnerNodes
   Dim objClusResource,objOwnerNode
   Dim strPrimaryNode
 
   strPrimaryNode    = ""
-  Set colClusResources = objClusGroup.Resources
+  Set colClusResources = objCluster.Resources
   For Each objClusResource In colClusResources
-    If UCase(objClusResource.Name) = UCase(strNetwork) Then
+    If UCase(objClusResource.Name) = UCase(strResource) Then
       Set colOwnerNodes = objClusResource.PossibleOwnerNodes
       For Each objOwnerNode In colOwnerNodes
         Call DebugLog("Resource: " & objClusResource.Name & ", Owner: " & objOwnerNode.Name)
@@ -790,7 +790,7 @@ Private Function CheckAddressUsed(strClusterName, strClusIPAddr)
 End Function
 
 
-Private Sub MoveClusterVolume(strClusterGroup, strResourceName, strVolList)
+Private Sub MoveClusterVolume(strClusterGroup, strResourceName, strVolList, strVolReset)
   Call DebugLog("MoveClusterVolume: " & strVolList & " for " & strClusterGroup)
   Dim arrVolumes
   Dim strVolLabel, strVolParam, strVolSource, strVolType
@@ -809,7 +809,7 @@ Private Sub MoveClusterVolume(strClusterGroup, strResourceName, strVolList)
       Case strVolSource = "C"
         strVolLabel = MoveClusterCSV(strClusterGroup, strVolParam)
       Case (strVolSource = "D") And (strVolType <> "L")
-        strVolLabel = MoveClusterDrive(strClusterGroup, strVolParam)
+        strVolLabel = MoveClusterDrive(strClusterGroup, strVolParam, strVolReset)
       Case strVolSource = "M"
         strVolLabel = MoveClusterMP(strClusterGroup, strVolParam)
     End Select
@@ -863,7 +863,7 @@ Private Function MoveClusterMP(strClusterGroup, strVolParam)
 End Function
 
 
-Private Function MoveClusterDrive(strClusterGroup, strVolParam)
+Private Function MoveClusterDrive(strClusterGroup, strVolParam, strVolReset)
   Call DebugLog("MoveClusterDrive: " & strVolParam & " for " & strClusterGroup)
   Dim intIdx, intLen
   Dim strVol, strVolLabel, strVolList
@@ -878,6 +878,9 @@ Private Function MoveClusterDrive(strClusterGroup, strVolParam)
         ' Nothing
       Case Else
         Call SetResourceOff(strVolLabel, "")
+        If strVolReset = "Y" Then
+          Call ClearResParent(strVolLabel)
+        End If
         strDebugMsg1            = "Moving " & strVolLabel & " to " & strClusterGroup
         strFailoverClusterDisks = strFailoverClusterDisks & """" & strVolLabel & """ "
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strVolLabel & """ /MOVE:""" & strClusterGroup & """"
@@ -889,6 +892,27 @@ Private Function MoveClusterDrive(strClusterGroup, strVolParam)
   MoveClusterDrive  = strVolLabel
 
 End Function
+
+
+Private Sub ClearResParent(strVolLabel)
+  Call DebugLog("ClearResParent: " & strVolLabel)
+  Dim colDependencies
+  Dim objDependency
+
+  Set colResources  = GetClusterResources()
+  For Each objResource In colResources
+    Set colDependencies = objResource.Dependencies
+    For Each objDependency In colDependencies
+      If objDependency.Name = strVolLabel Then
+        strDebugMsg1 = "Clear " & strVolLabel & " From " & objResource.Name
+        colDependencies.RemoveItem strVolLabel
+        Call SetBuildfileValue("ResParent", objResource.Name)
+      End If
+   Next
+  Next
+
+
+End Sub
 
 
 Sub SetResourceOff(strResource, strResourceType)
@@ -980,8 +1004,8 @@ Sub ConnectCluster()
   Call FBManageCluster.ConnectCluster()
 End Sub
 
-Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strPriority)
-  Call FBManageCluster.BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strPriority)
+Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strVolReset, strPriority)
+  Call FBManageCluster.BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceType, strServiceName, strServiceDesc, strServiceCheck, strVolList, strVolReset, strPriority)
 End Sub
 
 Sub AddChildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, strServiceName, strServiceDesc, strServiceCheck)

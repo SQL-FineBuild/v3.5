@@ -1,4 +1,4 @@
--- Copyright FineBuild Team © 2020.  Distributed under Ms-Pl License
+-- Copyright FineBuild Team © 2021.  Distributed under Ms-Pl License
 --
 -- Rebuild the PolyBase proxy authorisations
 -- Based on a script from Microsoft Support
@@ -7,6 +7,58 @@
 -- and on a fast server the CREATE CERTIFICATE processing may not complete before the subsequent
 -- commands which prevents them from working.  This condition does not trigger an error in the 
 -- Microsoft PolyBase install, so the relevant processing is repeated here.
+
+USE [DWConfiguration]
+CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)]
+ALTER ROLE [db_datareader] ADD MEMBER [$(strPBSvcAcnt)]
+ALTER ROLE [db_datawriter] ADD MEMBER [$(strPBSvcAcnt)]
+
+USE [DWQueue]
+CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)]
+ALTER ROLE [db_datareader] ADD MEMBER [$(strPBSvcAcnt)]
+ALTER ROLE [db_datawriter] ADD MEMBER [$(strPBSvcAcnt)]
+
+GRANT EXEC ON [DWQueue].dbo.[MessageQueueActivate] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[MessageQueueDeleteMessage] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[MessageQueueDequeueAccept] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[MessageQueueEnqueue] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[MessageQueuePeek] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[MessageQueueReceive] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[TransactionStateDelete] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[TransactionStateGetCommittedOperationState] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[TransactionStateGetCurrentOperationState] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[TransactionStateCreate] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[TransactionStateUpdate] TO [$(strPBSvcAcnt)]
+GRANT EXEC ON [DWQueue].dbo.[MessageQueueUpdate] TO [$(strPBSvcAcnt)]
+
+
+USE [DWDiagnostics]
+CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)]
+ALTER ROLE [db_datareader] ADD MEMBER [$(strPBSvcAcnt)]
+ALTER ROLE [db_datawriter] ADD MEMBER [$(strPBSvcAcnt)]
+ALTER ROLE [db_ddladmin] ADD MEMBER [$(strPBSvcAcnt)]
+
+--***** 
+-- The following section serves as a wrapper of sp_pdw_sm_detach to execute it as SYSADMIN. This procedure is created during setup/upgrade.
+--*****
+
+USE [DWConfiguration]
+GO
+
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[sp_pdw_sm_detach]') AND type in (N'P', N'PC'))
+  DROP PROCEDURE [sp_pdw_sm_detach];
+GO
+
+CREATE PROCEDURE [sp_pdw_sm_detach]
+    -- Parameters
+    @FileName nvarchar(45)  -- shared memory name
+    AS
+        SET NOCOUNT ON;
+        EXEC [sp_sm_detach] @FileName;
+GO
+
+GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_sm_detach] TO [$(strPBSvcAcnt)]
+GO
 
 --Create a certificate and sign the procedure with a unique password
 IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_SmDetachSigningCertificate##') DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##;
@@ -33,6 +85,27 @@ WAITFOR DELAY ''00:00:01'';
 CREATE LOGIN [l_certSignSmDetach] FROM CERTIFICATE [_##PDW_SmDetachSigningCertificate##];
 ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignSmDetach];'
 EXEC(@cmd)
+GO
+
+--***** 
+-- The following section serves as a wrapper of sp_polybase_authorize to execute it as SYSADMIN. This procedure is created during setup/upgrade.
+--*****
+USE [DWConfiguration]
+GO
+
+IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[sp_pdw_polybase_authorize]') AND type in (N'P', N'PC'))
+    DROP PROCEDURE [sp_pdw_polybase_authorize];
+GO
+
+CREATE PROCEDURE [sp_pdw_polybase_authorize]
+    -- Parameters
+    @AppName nvarchar(max)
+    AS
+        SET NOCOUNT ON;
+        EXEC [sp_polybase_authorize] @AppName;
+GO
+
+GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_polybase_authorize] TO [$(strPBSvcAcnt)];
 GO
 
 --Create a certificate and sign the procedure with a unique password
