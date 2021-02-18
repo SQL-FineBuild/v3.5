@@ -19,8 +19,9 @@ Option Explicit
 Dim FBManageService: Set FBManageService = New FBManageServiceClass
 
 Class FBManageServiceClass
-  Dim objFile, objFolder, objFSO, objShell
-  Dim strActionSQLAS, strActionSQLDB, strActionSQLRS, strCmd, strClusterName, strInstance, strResSuffixAS, strResSuffixDB, strSetupSQLAS, strSetupSQLDB, strSetupSQLDBCluster, strSetupSQLRS, strSetupSQLRSCluster, strWaitLong, strWaitShort
+  Dim objFile, objFolder, objFSO, objShell, objWMIReg
+  Dim strActionSQLAS, strActionSQLDB, strActionSQLRS, strCmd, strClusterName, strInstance, strPath, strResSuffixAS, strResSuffixDB
+  Dim strSetupSQLAS, strSetupSQLDB, strSetupSQLDBCluster, strSetupSQLRS, strSetupSQLRSCluster, strWaitLong, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -28,6 +29,7 @@ Private Sub Class_Initialize
 
   Set objFSO        = CreateObject("Scripting.FileSystemObject")
   Set objShell      = CreateObject ("Wscript.Shell")
+  Set objWMIReg     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\default:StdRegProv")
 
   strActionSQLAS    = GetBuildfileValue("ActionSQLAS")
   strActionSQLDB    = GetBuildfileValue("ActionSQLDB")
@@ -45,6 +47,80 @@ Private Sub Class_Initialize
   strWaitShort      = GetBuildfileValue("WaitShort")
 
 End Sub
+
+
+Sub ClearServiceDependency(strService, strDepend)
+  Call DebugLog("ClearServiceDependency: " & strService)
+  Dim arrDepends
+  Dim intDepend, intIdx, intIdxNew
+
+  strPath     = "SYSTEM\CurrentControlSet\Services\" & strService & "\"
+  objWMIReg.GetMultiStringValue strHKLM, strPath, "DependOnService", arrDepends
+  Select Case True
+    Case strservice = ""
+      ' Nothing
+    Case strDepend = ""
+      ' Nothing
+    Case Not IsArray(arrDepends)
+      ' Nothing
+    Case UBound(arrDepends) = 0
+      ' Nothing
+    Case Else
+      intIdxNew     = -1
+      intDepend     = Ubound(arrDepends)
+      ReDim arrDependsNew(intDepend)
+      For intIdx = 0 To intDepend
+        If UCase(arrDepends(intIdx)) <> strDepend Then
+          intIdxNew = intIdxNew + 1
+          arrDependsNew(intIdxNew) = arrDepends(intIdx)
+        End If
+      Next
+      If intIdxNew < 0 Then
+        intIdxNew   = 0
+        arrDependsNew(intIdxNew) = vbNullChar
+      End If
+      ReDim Preserve arrDependsNew(intIdxNew)
+      objWMIReg.SetMultiStringValue strHKLM, strPath, "DependOnService", arrDependsNew
+  End Select
+
+End Sub
+
+
+Sub SetServiceDependency(strService, strDepend)
+  Call DebugLog("SetServiceDependency: " & strService)
+  Dim arrDepends
+  Dim intDepend, intIdx, intIdxNew
+
+  strPath     = "SYSTEM\CurrentControlSet\Services\" & strService & "\"
+  objWMIReg.GetMultiStringValue strHKLM, strPath, "DependOnService", arrDepends
+  Select Case True
+    Case strservice = ""
+      ' Nothing
+    Case strDepend = ""
+      ' Nothing
+    Case Not IsArray(arrDepends)
+      ' Nothing
+    Case UBound(arrDepends) = 0
+      ' Nothing
+    Case Else
+      intIdxNew     = -1
+      intDepend     = Ubound(arrDepends)
+      ReDim arrDependsNew(intDepend)
+      For intIdx = 0 To intDepend
+        arrDependsNew(intIdx) = arrDepends(intIdx)
+        If UCase(arrDepends(intIdx)) = strDepend Then
+          intIdxNew     = intIdx
+        End If
+      Next
+      If intIdxNew < 0 Then
+        intIdxNew       = intDepend + 1
+        ReDim Preserve arrDependsNew(intIdxNew)
+        arrDependsNew(intIdxNew) = strDepend
+      End If
+      objWMIReg.SetMultiStringValue strHKLM, strPath, "DependOnService", arrDependsNew
+End Select
+
+End Sub 
 
 
 Sub StopSQL()
@@ -356,6 +432,14 @@ End Sub
 
 End Class
 
+
+Sub ClearServiceDependency(strService, strDepend)
+  Call FBManageService.ClearServiceDependency(strService, strDepend)
+End Sub
+
+Sub SetServiceDependency(strService, strDepend)
+  Call FBManageService.SetServiceDependency(strService, strDepend)
+End Sub
 
 Sub StopSQL()
   Call FBManageService.StopSQL()

@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageInstall.vbs  
-'  Copyright FineBuild Team © 2017 - 2020.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2017 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Install routines required for the Build 
 '
@@ -43,8 +43,8 @@
 '  PathAlt                             Alternative Path to find Install Module
 '  PathLog       GetLogPath()          Path to Log File
 '  PathMain                            Main Path to find Install Module
-'  PreConKey                           Registry Rey to check in PreCon test
-'  PreConType    String                Data Type of Pre-Con Registry Key
+'  PreConKey                           Registry Key to check in PreCon test
+'  PreConType    Registry              Location of PreCon data
 '  PreConValue                         Value to check in PreCon test
 '  SetupOption                         Pre-Install Option
 '  StatusOption  strStatusComplete     Completion Status
@@ -131,7 +131,7 @@ Private Function RunInstall_PreCon(strInstName, strInstFile, objInstParm)
 
   RunInstall_PreCon = False
   strCleanBoot      = UCase(GetXMLParm(objInstParm, "CleanBoot",   ""))
-  strPreConType     = UCase(GetXMLParm(objInstParm, "PreConType",  "String"))
+  strPreConType     = UCase(GetXMLParm(objInstParm, "PreConType",  "Registry"))
 
   Select Case True
     Case strCleanBoot <> "YES"
@@ -205,22 +205,36 @@ End Function
 
 Private Function RunInstall_PreCon_Registry(objInstParm)
   Call DebugLog("RunInstall_PreCon_Registry:")
+  Dim arrName, arrType
   Dim intIdx
-  Dim strPreConKey, strPreConStatus, strPreConType, strPreConValue
+  Dim strPreConKey, strPreConStatus, strPreConValue, strRegPath, strRegKey
 
   RunInstall_PreCon_Registry = False
   strPreConKey      = GetXMLParm(objInstParm,       "PreConKey",   "")
-  strPreConType     = UCase(GetXMLParm(objInstParm, "PreConType",  "String"))
   strPreConValue    = GetXMLParm(objInstParm,       "PreConValue", "")
 
-  intIdx            = InstrRev(strPreConKey, "\")
+  If strPreConKey = "" Then
+    Exit Function
+  End If
+
+  intIdx            = InstrRev(Left(strPreConKey, Len(strPreConKey) - 1), "\")
+  strRegPath        = Left(strPreConKey, intIdx)
+  strRegKey         = Mid(strPreConKey, intIdx + 1)
+  objWMIReg.EnumValues, strHKLM, strRegPath, arrName, arrType
   Select Case True
-    Case strPreConKey = ""
+    Case IsNull(arrName)
       Exit Function
-    Case strPreConType = "DWORD"
-      objWMIReg.GetDWordValue  strHKLM,Left(strPreConKey, intIdx),Mid(strPreConKey, intIdx + 1),strPreConStatus
-    Case strPreConType = "STRING"
-      objWMIReg.GetStringValue strHKLM,Left(strPreConKey, intIdx),Mid(strPreConKey, intIdx + 1),strPreConStatus
+    Case Else
+      For intIdx = 0 To UBound(arrName) - 1
+        Select Case True
+          Case arrName(intIdx) <> strRegKey
+            ' Nothing
+          Case arrType(intIdx) = 4
+            objWMIReg.GetDWordValue  strHKLM,strRegPath,strRegKey,strPreConStatus
+          Case arrType(intIdx) = 1
+            objWMIReg.GetStringValue strHKLM,strRegPath,strRegKey,strPreConStatus
+        End Select
+      Next
   End Select
 
   Call DebugLog("Check Precon: " & strPreConKey)

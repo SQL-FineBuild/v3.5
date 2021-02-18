@@ -70,7 +70,9 @@ Sub BuildCluster(strProcess, strClusterGroup, strResourceName, strNetworkName, s
 
   Call SetBuildfileValue("FailoverClusterDisks", "")
 
-  Call SetupClusterGroup(strClusterGroup, strPriority)
+  Call SetupClusterGroup(strClusterGroup)
+
+  Call SetGroupPriority(strClusterGroup, strPriority)
 
   If strResourceName <> "" Then
     Call SetupClusterService(strClusterGroup, strResourceName, strServiceName, strServiceType, strServiceDesc, strServiceCheck)
@@ -224,7 +226,7 @@ Function GetPrimaryNode(strResource)
   Dim strPrimaryNode
 
   strPrimaryNode    = ""
-  Set colClusResources = objCluster.Resources
+  Set colClusResources = GetClusterResources()
   For Each objClusResource In colClusResources
     If UCase(objClusResource.Name) = UCase(strResource) Then
       Set colOwnerNodes = objClusResource.PossibleOwnerNodes
@@ -240,6 +242,24 @@ Function GetPrimaryNode(strResource)
   Next
 
   GetPrimaryNode    = strPrimaryNode
+
+End Function
+
+
+Function GetResService(strResourceName)
+  Dim strService
+
+  Set colResources  = GetClusterResources()
+  strService        = ""
+
+  For Each objResource In colResources
+    If UCase(objResource.Name) = UCase(strResourceName) Then
+      strService    = objResource.PrivateProperties("ServiceName")
+      Exit For
+    End If
+  Next
+
+  GetResService = strService
 
 End Function
 
@@ -303,6 +323,26 @@ Sub RemoveOwner(strResourceName, strOwnerNode)
 End Sub
 
 
+Sub SetGroupPriority(strClusterGroup, strPriority)
+  Call DebugLog("SetGroupPriority: " & strPriority)
+  Dim strPriorityValue
+
+  Select Case True
+    Case strPriority = "L"
+      strPriorityValue = 1000
+    Case strPriority = "H"
+      strPriorityValue = 3000
+    Case Else
+      strPriorityValue = 2000
+  End Select
+
+  If strOSVersion >= "6.2" Then
+    strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /PROP Priority=" & strPriorityValue
+    Call Util_RunExec(strCmd, "", strResponseYes, 0)
+  End If
+
+End Sub
+
 
 Sub SetOwnerNode(strClusterGroup)
   Call DebugLog("SetOwnerNode: " & strClusterGroup)
@@ -316,29 +356,14 @@ Sub SetOwnerNode(strClusterGroup)
 End Sub
 
 
-Private Sub SetupClusterGroup(strClusterGroup, strPriority)
+Private Sub SetupClusterGroup(strClusterGroup)
   Call DebugLog("SetupClusterGroup: " & strClusterGroup)
-  Dim strPriorityValue
-
-  Select Case True
-    Case strPriority = "L"
-      strPriorityValue = 1000
-    Case strPriority = "H"
-      strPriorityValue = 3000
-    Case Else
-      strPriorityValue = 2000
-  End Select
 
   strCmd            = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /CREATE"
   Call Util_RunExec(strCmd, "", strResponseYes, 5010)
 
   Call SetResourceOff(strClusterGroup, "GROUP")
   Call MoveToNode(strClusterGroup, "")
-
-  If strOSVersion >= "6.2" Then
-    strCmd          = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroup & """ /PROP Priority=" & strPriorityValue
-    Call Util_RunExec(strCmd, "", strResponseYes, 0)
-  End If
 
 End Sub
 
@@ -911,7 +936,6 @@ Private Sub ClearResParent(strVolLabel)
    Next
   Next
 
-
 End Sub
 
 
@@ -947,6 +971,8 @@ Sub SetResourceOn(strResource, strResourceType)
   Call Util_RunExec(strCmd, "", strResponseYes, -1)
   Select Case True
     Case intErrSave = 0
+      ' Nothing
+'    Case (intErrSave = 5023) Or (intErrSave = 5942) ' Only needed if Cluster is already broken
       ' Nothing
     Case intErrSave = 5063
       ' Nothing
@@ -1052,6 +1078,10 @@ Function GetPrimaryNode(objResource)
   GetPrimaryNode    = FBManageCluster.GetPrimaryNode(objResource)
 End Function
 
+Function GetResService(strResourceName)
+  GetResService     = FBManageCluster.GetResService(strResourceName)
+End Function
+
 Function GetStorageGroup(strGroupDefault)
   GetStorageGroup   = FBManageCluster.GetStorageGroup(strGroupDefault)
 End Function
@@ -1062,6 +1092,10 @@ End Sub
 
 Sub RemoveOwner(strResourceName, strOwnerNode)
   Call FBManageCluster.RemoveOwner(strResourceName, strOwnerNode)
+End Sub
+
+Sub SetGroupPriority(strClusterGroup, strPriority)
+  Call FBManageCluster.SetGroupPriority(strClusterGroup, strPriority)
 End Sub
 
 Sub SetOwnerNode(strCluster)
