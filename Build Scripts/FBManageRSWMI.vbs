@@ -23,7 +23,7 @@ Dim intRSLcid
 
 Class FBManageRSWMIClass
   Dim objRSConfig, objRSWMI, objShell
-  Dim strFunction, strHTTP, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSWMIPath, strSetupPowerBI, strSetupSQLRSCluster, strTCPPortRS, strSQLVersion, strWMIPath
+  Dim strFunction, strHTTP, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSWMIPath, strSetupPowerBI, strSetupSSL, strSetupSQLRSCluster, strTCPPortRS, strSQLVersion, strWMIPath
 
 
 Private Sub Class_Initialize
@@ -41,6 +41,7 @@ Private Sub Class_Initialize
   strRSNamespace    = "MSReportServer_ConfigurationSetting"
   strRSVersionNum   = GetBuildfileValue("RSVersionNum")
   strSetupPowerBI   = GetBuildfileValue("SetupPowerBI")
+  strSetupSSL       = GetBuildfileValue("SetupSSL")
   strSetupSQLRSCluster = GetBuildfileValue("SetupSQLRSCluster")
   strSQLVersion     = GetBuildfileValue("SQLVersion")
   strTCPPortRS      = GetBuildfileValue("TCPPortRS")
@@ -180,6 +181,8 @@ Private Sub SetRSURL(strApplication, strDirectory)
   End Select
 
   Select Case True
+'    Case strSetupSSL = "YES"
+'      Call SetRSSSL(strFunction, objRSInParam, strURLVar, strRSAlias)
     Case strRSAlias <> ""
       Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strRSAlias)
     Case strSetupSQLRSCluster = "YES"
@@ -207,6 +210,18 @@ Private Sub SetRSURL(strApplication, strDirectory)
   End Select
 
   strRSNamespace    = strStoreNamespace
+
+End Sub
+
+
+Private Sub SetRSSSL(strFunction, objRSInParam, strURLVar, strHost)
+  Call DebugLog("SetRSURLItem: " & strHost) ' see https://community.certifytheweb.com/t/sql-server-reporting-services-ssrs/332.  Also IIS needs to be configured
+  Dim strURL
+
+  strURL             = strHTTP & "://*:" & strTCPPortRS
+  strDebugMsg1       = "URL: " & strURL
+  objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL
+  Call RunRSWMI(strFunction, "-2147220932") ' OK if URL already exists
 
 End Sub
 

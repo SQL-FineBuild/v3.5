@@ -118,7 +118,7 @@ Sub SetServiceDependency(strService, strDepend)
         arrDependsNew(intIdxNew) = strDepend
       End If
       objWMIReg.SetMultiStringValue strHKLM, strPath, "DependOnService", arrDependsNew
-End Select
+  End Select
 
 End Sub 
 

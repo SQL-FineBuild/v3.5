@@ -134,13 +134,6 @@ Private Function RunInstall_PreCon(strInstName, strInstFile, objInstParm)
   strPreConType     = UCase(GetXMLParm(objInstParm, "PreConType",  "Registry"))
 
   Select Case True
-    Case strCleanBoot <> "YES"
-      ' Nothing
-    Case CheckReboot() = "Pending"
-      Call SetupReboot(strProcessIdLabel, "Prepare for " & strInstName)
-  End Select
-
-  Select Case True
     Case strPreConType = "FILE"
       RunInstall_PreCon = RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
       If RunInstall_PreCon Then
@@ -155,6 +148,15 @@ Private Function RunInstall_PreCon(strInstName, strInstFile, objInstParm)
       End If
   End Select
 
+  Select Case True
+    Case RunInstall_PreCon = True ' If already installed then no reboot check is needed
+      ' Nothing
+    Case strCleanBoot <> "YES"
+      ' Nothing
+    Case CheckReboot() = "Pending"
+      Call SetupReboot(strProcessIdLabel, "Prepare for " & strInstName)
+  End Select
+
 End Function
 
 
@@ -164,7 +166,7 @@ Private Function RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
   Dim intIdx
   Dim strPathAlt, strPathMain, strPreConStatus, strPreConValue, strVerFile
 
-  RunInstall_PreCon_File = True
+  RunInstall_PreCon_File = False
   strPreConValue    = GetXMLParm(objInstParm, "PreConValue", "")
   strPathAlt        = GetXMLParm(objInstParm, "PathAlt", "")
   Select Case True
@@ -198,7 +200,7 @@ Private Function RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
     End Select
   Next
 
-  RunInstall_PreCon_File = False
+  RunInstall_PreCon_File = True
 
 End Function
 
@@ -218,9 +220,9 @@ Private Function RunInstall_PreCon_Registry(objInstParm)
   End If
 
   intIdx            = InstrRev(Left(strPreConKey, Len(strPreConKey) - 1), "\")
-  strRegPath        = Left(strPreConKey, intIdx)
+  strRegPath        = Left(strPreConKey, intIdx - 1)
   strRegKey         = Mid(strPreConKey, intIdx + 1)
-  objWMIReg.EnumValues, strHKLM, strRegPath, arrName, arrType
+  objWMIReg.EnumValues strHKLM, strRegPath, arrName, arrType
   Select Case True
     Case IsNull(arrName)
       Exit Function
