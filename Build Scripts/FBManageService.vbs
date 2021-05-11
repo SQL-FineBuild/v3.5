@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageService.vbs  
-'  Copyright FineBuild Team © 2018 - 2020.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2018 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Start and Stop SQL Server Services 
 '
@@ -87,38 +87,45 @@ End Sub
 
 
 Sub SetServiceDependency(strService, strDepend)
-  Call DebugLog("SetServiceDependency: " & strService)
+  Call DebugLog("SetServiceDependency: " & strService & " on " & strDepend)
   Dim arrDepends
   Dim intDepend, intIdx, intIdxNew
 
-  strPath     = "SYSTEM\CurrentControlSet\Services\" & strService & "\"
-  objWMIReg.GetMultiStringValue strHKLM, strPath, "DependOnService", arrDepends
   Select Case True
     Case strservice = ""
-      ' Nothing
+      Exit Sub
     Case strDepend = ""
-      ' Nothing
+      Exit Sub
+  End Select
+
+  intDepend         = -1
+  intIdxNew         = -1
+  strPath           = "SYSTEM\CurrentControlSet\Services\" & strService & "\"
+  objWMIReg.GetMultiStringValue strHKLM, strPath, "DependOnService", arrDepends
+
+  Select Case True
     Case Not IsArray(arrDepends)
       ' Nothing
     Case UBound(arrDepends) = 0
       ' Nothing
     Case Else
-      intIdxNew     = -1
       intDepend     = Ubound(arrDepends)
       ReDim arrDependsNew(intDepend)
       For intIdx = 0 To intDepend
         arrDependsNew(intIdx) = arrDepends(intIdx)
-        If UCase(arrDepends(intIdx)) = strDepend Then
+        If UCase(arrDepends(intIdx)) = UCase(strDepend) Then
           intIdxNew     = intIdx
         End If
       Next
-      If intIdxNew < 0 Then
-        intIdxNew       = intDepend + 1
-        ReDim Preserve arrDependsNew(intIdxNew)
-        arrDependsNew(intIdxNew) = strDepend
-      End If
-      objWMIReg.SetMultiStringValue strHKLM, strPath, "DependOnService", arrDependsNew
   End Select
+
+  If intIdxNew < 0 Then
+    intIdxNew       = intDepend + 1
+    ReDim Preserve arrDependsNew(intIdxNew)
+    arrDependsNew(intIdxNew) = strDepend
+  End If
+
+  objWMIReg.SetMultiStringValue strHKLM, strPath, "DependOnService", arrDependsNew
 
 End Sub 
 

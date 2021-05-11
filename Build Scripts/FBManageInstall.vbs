@@ -730,14 +730,17 @@ Function GetPathInst(strInstFile, strPathMain, strPathAlt)
   If Right(strPathInstAlt, 1) <> "\" Then
     strPathInstAlt  = strPathInstAlt & "\"
   End If
+
   Select Case True
     Case objFSO.FileExists(strPathInst & strInstNLS)
       strPathInst   = strPathInst & strInstNLS
     Case objFSO.FileExists(strPathInst & strInstFile)
       strPathInst   = strPathInst & strInstFile
-    Case (strPathInstAlt <> "") And (objFSO.FileExists(strPathInstAlt & strInstNLS))
+    Case strPathInstAlt = "" 
+      strPathInst   = ""
+    Case objFSO.FileExists(strPathInstAlt & strInstNLS)
       strPathInst   = strPathInstAlt & strInstNLS
-    Case (strPathInstAlt <> "") And (objFSO.FileExists(strPathInstAlt & strInstFile))
+    Case objFSO.FileExists(strPathInstAlt & strInstFile)
       strPathInst   = strPathInstAlt & strInstFile
     Case Else 
       strPathInst   = ""

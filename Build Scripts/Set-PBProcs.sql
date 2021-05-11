@@ -60,12 +60,12 @@ GO
 GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_sm_detach] TO [$(strPBSvcAcnt)]
 GO
 
---Create a certificate and sign the procedure with a unique password
+--Create a certificate and sign the procedure with a password unique to the Failover group
 IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_SmDetachSigningCertificate##') DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##;
 GO
 
 DECLARE @certpasswordDCB nvarchar(max);
-SET @certpasswordDCB = QUOTENAME(newid(), N'''');
+SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
 EXECUTE(N'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_sm_detach SP'';');
 
 EXECUTE(N'ADD SIGNATURE to [sp_pdw_sm_detach] BY CERTIFICATE _##PDW_SmDetachSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
@@ -108,12 +108,12 @@ GO
 GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_polybase_authorize] TO [$(strPBSvcAcnt)];
 GO
 
---Create a certificate and sign the procedure with a unique password
+--Create a certificate and sign the procedure with a password unique to the Failover group
 IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_PolyBaseAuthorizeSigningCertificate##') DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##;
 GO
 
 DECLARE @certpasswordDCB nvarchar(max);
-SET @certpasswordDCB = QUOTENAME(newid(), N'''');
+SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
 EXECUTE(N'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_polybase_authorize SP'';');
 EXECUTE(N'ADD SIGNATURE to [sp_pdw_polybase_authorize] BY CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
 GO

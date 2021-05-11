@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBUtils.vbs  
-'  Copyright FineBuild Team © 2017 - 2020.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2017 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Miscellaneous Utilities 
 '
@@ -22,13 +22,13 @@ Dim strErrSave, strResponseYes, strResponseNo
 
 Class FBUtilsClass
 
-Dim objAutoUpdate, objFile, objFSO, objFW, objFWRules, objShell, objWMI, objWMIReg
+Dim objAutoUpdate, objFile, objFSO, objShell, objSQL, objSQLData, objWMI, objWMIReg
 Dim colPrcEnvVars
 Dim intIdx
-Dim strCmd, strCmdPS, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA
-Dim strIsInstallDBA, strOSVersion
+Dim strCmd, strCmdPS, strCmdSQL
+Dim strOSVersion
 Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools
-Dim strServer, strServInst, strSIDDistComUsers, strSQLVersion, strSQLVersionNum, strUserAccount, strWaitShort
+Dim strServer, strServInst, strSQLVersion, strSQLVersionNum, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -36,8 +36,6 @@ Private Sub Class_Initialize
 
   Set objAutoUpdate = CreateObject("Microsoft.Update.AutoUpdate")
   Set objFSO        = CreateObject("Scripting.FileSystemObject")
-  Set objFW         = CreateObject("HNetCfg.FwPolicy2")
-  Set objFWRules    = objFW.Rules
   Set objShell      = CreateObject("Wscript.Shell")
   Set objWMI        = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\cimv2")
   Set objWMIReg     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\default:StdRegProv")
@@ -49,18 +47,12 @@ Private Sub Class_Initialize
   If strProcessIdCode <> "FBCV" Then
     strCmdPS          = GetBuildfileValue("CmdPS")
     strCmdSQL         = GetBuildfileValue("CmdSQL")
-    strDirSystemDataBackup = GetBuildfileValue("DirSystemDataBackup")
-    strGroupDBA       = GetBuildfileValue("GroupDBA")
-    strGroupDBANonSA  = GetBuildfileValue("GroupDBANonSA")
-    strIsInstallDBA   = GetBuildfileValue("IsInstallDBA")
     strOSVersion      = GetBuildfileValue("OSVersion")
     strProgCacls      = GetBuildfileValue("ProgCacls")
     strServer         = GetBuildfileValue("AuditServer")
     strServInst       = GetBuildfileValue("ServInst")
-    strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
     strResponseNo     = GetBuildfileValue("ResponseNo")
     strResponseYes    = GetBuildfileValue("ResponseYes")
-    strUserAccount    = GetBuildfileValue("UserAccount")
     strWaitShort      = GetBuildfileValue("WaitShort")
     Call SetHKLMSQL()
   End If
@@ -76,21 +68,6 @@ Sub CopyFile(strSource, strTarget)
   If Not objFSO.FileExists(strPath) Then
     objFile.Copy strPath, True
   End If
-
-End Sub
-
-
-Sub BackupDBMasterKey(strDB, strPassword)
-  Call DebugLog("BackupDBMasterKey: " & strDB)
-  Dim strPathNew
-
-  strPathNew        = strDirSystemDataBackup & "\" & strDB & "DBMasterKey.snk"
-  If objFSO.FileExists(strPathNew) Then
-    Call objFSO.DeleteFile(strPathNew, True)
-    Wscript.Sleep strWaitShort
-  End If
-
-  Call Util_ExecSQL(strCmdSQL & "-d """ & strDB & """ -Q", """BACKUP MASTER KEY TO FILE='" & strPathNew & "' ENCRYPTION BY PASSWORD='" & strPassword & "';""", 0)
 
 End Sub
 
@@ -232,150 +209,27 @@ Function GetCmdSQL()
 End Function
 
 
-Sub ResetDBAFilePerm(strFolder)
-  Call DebugLog("ResetDBAFilePerm: " & strFolder)
+Function GetSQLConnection(strServInst)
+  Call DebugLog("GetSQLConnection: " & strServInst)
+  
+  Set objSQL        = CreateObject("ADODB.Connection")
+  objSQL.Provider   = "SQLOLEDB"
+  objSQL.ConnectionString = "Driver={SQL Server};Server=" & strServInst & ";Database=master;Trusted_Connection=Yes;"
+  strDebugMsg1      = objSQL.ConnectionString
+  objSQL.Open 
 
-  Call ResetFilePerm(strFolder, strGroupDBA)
+  Set objSQLData    = CreateObject("ADODB.Recordset")
+  Set GetSQLConnection = objSQL
 
-  If strGroupDBANonSA <> "" Then
-    Call ResetFilePerm(strFolder, strGroupDBANonSA)
-  End If
-
-  If strIsInstallDBA = "1" Then
-    Call ResetFilePerm(strFolder, strUserAccount)
-  End If
-
-End Sub
-
-
-Sub ResetFilePerm(strFolder, strAccount)
-  Call DebugLog("ResetFilePerm: " & strAccount)
-
-  strPath           = strFolder
-  If Right(strPath, 1) = "\" Then
-    strPath         = Left(strPath, Len(strPath) - 1)
-  End If
-
-  Select Case True
-    Case strAccount = strGroupDBA
-      strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strGroupDBA) & """:F"
-      Call RunCacls(strCmd)
-    Case strAccount = strGroupDBANonSA
-      strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strGroupDBANonSA) & """:R"
-      Call RunCacls(strCmd)
-    Case Else 
-      strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strAccount) & """:F"
-      Call RunCacls(strCmd)
-  End Select
-
-End Sub
+End Function
 
 
-Sub RunCacls(strCmd)
-  Call DebugLog("RunCacls: " & strCmd)
-  Dim arrCmd
-  Dim intUBound, intIdx, intIdx2
-  Dim strNTService, strShareDrive
+Function GetSQLData(strCmd, strCmdItem)
+  Call DebugLog("GetSQLData: " & strCmdItem)
 
-  arrCmd            = Split(strCmd)
-  intUBound         = UBound(arrCmd)
-  strNTService      = GetBuildfileValue("NTService")
-  For intIdx = 0 To intUBound
-    Select Case True
-      Case Instr(arrCmd(intIdx), """:") = 0 
-        ' Nothing
-      Case Instr(arrCmd(intIdx), strNTService & "\") > 0 
-        arrCmd(intIdx) = ""
-      Case Else
-        For intIdx2 = intIdx + 1 To intUBound
-          Select Case True
-            Case Instr(arrCmd(intIdx2), """:") = 0
-              ' Nothing
-            Case StrComp(Left(arrCmd(intIdx), Instr(arrCmd(intIdx), """:")), Left(arrCmd(intIdx2), Instr(arrCmd(intIdx2), """:")), vbTextCompare) = 0
-              arrCmd(intIdx) = ""
-          End Select
-        Next      
-    End Select
-  Next  
-  strCmd            = Join(arrCmd, " ")
-
-  intIdx2           = 0
-  For intIdx = 0 To intUBound
-    Select Case True
-      Case Instr(arrCmd(intIdx), """:") = 0 
-        ' Nothing
-      Case Else
-        intIdx2     = 1
-    End Select
-  Next
-  If intIdx2 = 0 Then
-    Exit Sub
-  End If
-
-  strShareDrive     = ""
-  If Instr(strCmd, "\\") > 0 Then
-    strShareDrive   = GetShareDrive(strCmd)
-  End If
-
-  Call Util_RunExec(strProgCacls & " " & strCmd, "", strResponseYes, -1)
-  Select Case True
-    Case intErrSave = 0
-      ' Nothing
-    Case intErrSave = 2
-      ' Nothing
-    Case intErrSave = 13
-      ' Nothing
-    Case intErrSave = 67     ' Network Name not found
-      ' Nothing
-    Case intErrSave = 1240   ' Not Authorized - Cannot put permission on remote share root
-      ' Nothing
-    Case intErrSave = 1332   ' Problem with security descriptor
-      ' Nothing
-    Case Else
-      Call SetBuildMessage(strMsgError, "Error " & Cstr(intErrSave) & " " & strErrSave & " returned by " & strCmd)
-  End Select
-  Wscript.Sleep strWaitShort ' Allow time for CACLS processing to complete
-
-  If strShareDrive <> "" Then
-    Call Util_RunExec("NET USE " & strShareDrive & " /DELETE", "EOF", "", -1)
-  End If
-
-End Sub
-
-
-Private Function GetShareDrive(strCmd)
-  Call DebugLog("GetShareDrive: " & strCmd)
-  Dim intIdx, intIdx1, intIdx2, intIdx3, intIdx4
-  Dim strAlphabet, strDriveList, strShare, strShareDrive
-
-  strAlphabet       = GetBuildfileValue("Alphabet")
-  strDriveList      = GetBuildfileValue("DriveList")
-  strShareDrive     = ""
-  For intIdx = 3 To Len(strAlphabet)
-    strDebugMsg1    = "Index " & CStr(intIdx)
-    If Instr(strDriveList, Mid(strAlphabet, intIdx, 1)) = 0 Then
-      strDebugMsg2    = "Drive Found"
-      strShareDrive = Mid(strAlphabet, intIdx, 1) & ":"
-      Exit For
-    End If
-  Next
-
-  If strShareDrive <> "" Then
-    intIdx          = Instr(strCmd, "\\")
-    intIdx1         = Instr(intIdx  + 2, strCmd, "\")
-    intIdx2         = Instr(intIdx1 + 1, strCmd, "\")
-    intIdx3         = Instr(intIdx1 + 1, strCmd, """")
-    If intIdx3 = 0 Then
-      intIdx3       = Len(strCmd)
-    End If
-    intIdx4         = Min(intIdx2, intIdx3)
-    strShare        = Mid(strCmd, intIdx, intIdx4 - intIdx)
-    Call Util_RunExec("NET USE " & strShareDrive & " """ & strShare & """ /PERSISTENT:NO", "EOF", "", 0)
-    strCmd          = Left(strCmd, intIdx - 1) & strShareDrive & Mid(strCmd, intIdx4)
-    Wscript.Sleep strWaitShort
-  End If
-
-  GetShareDrive     = strShareDrive
+  Set objSQLData    = objSQL.Execute(strCmd)
+  objSQLData.MoveFirst
+  GetSQLData        = objSQLData.Fields(strCmdItem)
 
 End Function
 
@@ -404,149 +258,6 @@ Sub SetupFolder(strFolder)
   End Select
 
 End Sub
-
-
-Sub SetDCOMSecurity(strAppId)
-  Call DebugLog("SetDCOMSecurity: " & strAppId)
-  Dim arrPermDCom
-  Dim objHelper, objPermDCom
-  Dim strDescription, strPermDCom, strSDDLDCom
-
-  objWMIReg.GetBinaryValue strHKCR,strAppId,"LaunchPermission",arrPermDCom
-  Select Case True
-    Case IsNull(arrPermDCom) 
-      Exit Sub
-    Case strOSVersion < "6.0"
-      Exit Sub
-  End Select
-
-  objWMIReg.GetStringValue strHKCR,strAppId,"",strDescription
-  Call DebugLog(" " & strDescription & ", Appid: " & strAppId & ", Current Perm: " & strPermDCom)  
-
-  strSDDLDCom       = "(A;;CCDCLCSWRP;;;" & strSIDDistComUsers & ")"
-  strPath           = "winmgmts:{impersonationLevel=impersonate}!\\" & strServer & "\ROOT\cimv2:Win32_securityDescriptorHelper"
-  Set objHelper     = GetObject(strPath)
-  Call objHelper.BinarySDToSDDL(arrPermDCom, strPermDCom)
-  intIdx            = Instr(strPermDCom, strSIDDistComUsers)
-  If intIdx = 0 Then
-    intIdx          = Instr(strPermDCom, "(A;;CCSW;;;BU)")
-    If intIdx = 0 Then
-      strPermDCom   = strPermDCom & strSDDLDCom 
-    Else
-      strPermDCom   = Left(strPermDCom, intIdx - 1) & strSDDLDCom & Mid(strPermDCom, intIdx)
-    End If
-    Call DebugLog("Update DCom security with " & strPermDCom)
-    Call objHelper.SDDLToWin32SD(strPermDCom, objPermDCom)
-    Call objHelper.Win32SDToBinarySD(objPermDCom, arrPermDCom)
-    objWMIReg.SetBinaryValue strHKCR,strAppId,"LaunchPermission",arrPermDCom
-  End If
-
-  Set objHelper     = Nothing
-
-End Sub
-
-
-Sub SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
-  Call DebugLog("SetFWRule: " & strFWName & " for " & strFWPort)
-
-  Select Case True
-    Case Left(strOSVersion, 1) < "6"
-      Call SetFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
-    Case Else
-      Call SetAdvFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
-  End Select
-
-End Sub
-
-
-Private Sub SetFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
-  Call DebugLog("SetFirewall:")
-  Dim strRuleExist, strRuleType
-  
-  strRuleExist      = CheckFWName(strFWName)
-  Select Case True
-    Case strFWProgram <> ""
-      strRuleType   = "ALLOWEDPROGRAM"
-    Case Else
-      strRuleType   = "PORTOPENING"
-  End Select
-
-  Select Case True
-    Case strFirewallStatus <> "1"
-      ' Nothing
-    Case strRuleExist = False
-      strCmd        = "NETSH FIREWALL ADD " & strRuleType & " NAME=""" & strFWName & """ "
-      strCmd        = strCmd & "MODE=ENABLE SCOPE=ALL PROFILE=DOMAIN "
-      If strFWType <> "" Then
-        strCmd      = strCmd & "PROTOCOL=" & strFWType & " "
-      End If
-      If strFWPort <> "" Then
-        strCmd      = strCmd & "PORT=" & Replace(strFWPort, " ", "") & " "
-      End If
-      If strFWProgram <> "" Then
-        strCmd      = strCmd & "PROGRAM=""" & strFWProgram & """ "
-      End If
-      Call Util_RunExec(strCmd, "", strResponseYes, 0)
-  End Select
-
-  If (strRuleExist = True) Or (strFWEnable = "Y") Then
-    strCmd          = "NETSH FIREWALL SET NAME=""" & strFWName & """ "
-    strCmd          = strCmd & "PROFILE=DOMAIN MODE=ENABLE  "
-'    Call Util_RunExec(strCmd, "", strResponseYes, 0) verify syntax correct before enabling command
-  End If
-
-End Sub
-
-
-Private Sub SetAdvFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
-  Call DebugLog("SetAdvFirewall:")
-  Dim strRuleExist
-
-  strRuleExist      = CheckFWName(strFWName)
-
-  If strRuleExist = False Then 
-    strCmd          = "NETSH ADVFIREWALL FIREWALL ADD RULE NAME=""" & strFWName & """ "
-    strCmd          = strCmd & "ACTION=ALLOW PROFILE=DOMAIN "
-    If strFWDesc <> "" Then
-      strCmd        = strCmd & "DESCRIPTION=""" & strFWDesc & """ "
-    End If
-    If strFWType <> "" Then
-      strCmd        = strCmd & "PROTOCOL=" & strFWType & " "
-    End If
-    If strFWDir <> "" Then
-      strCmd        = strCmd & "DIR=" & strFWDir & " "
-    End If
-    If strFWPort <> "" Then
-      strCmd        = strCmd & "LOCALPORT=" & Replace(strFWPort, " ", "") & " "
-    End If
-    If strFWProgram <> "" Then
-      strCmd        = strCmd & "PROGRAM=""" & strFWProgram & """ "
-    End If
-    Call Util_RunExec(strCmd, "", strResponseYes, 0)
-  End If
-
-  If (strRuleExist = True) Or (strFWEnable = "Y") Then
-    strCmd          = "NETSH ADVFIREWALL FIREWALL SET RULE NAME=""" & strFWName & """ "
-    strCmd          = strCmd & "NEW PROFILE=DOMAIN ENABLE=YES "
-    Call Util_RunExec(strCmd, "", strResponseYes, 0)
-  End If
-
-End Sub
-
-
-Private Function CheckFWName(strFWName)
-  Call DebugLog("CheckFWName:")
-  Dim objFWRule
-
-  CheckFWName       = False
-  For Each objFWRule In objFWRules
-    If objFWRule.Name = strFWName Then
-      CheckFWName   = True
-      Exit For
-    End If
-  Next
-
-End Function
 
 
 Private Sub SetHKLMSQL()
@@ -874,10 +585,6 @@ End Sub
 End Class
 
 
-Sub BackupDBMasterKey(strDB, strPassword)
-  Call FBUtils.BackupDBMasterKey(strDB, strPassword)
-End Sub
-
 Sub CopyFile(strSource, strTarget)
   Call FBUtils.CopyFile(strSource, strTarget)
 End Sub
@@ -898,6 +605,14 @@ Function GetCmdSQL()
   GetCmdSQL         = FBUtils.GetCmdSQL()
 End Function
 
+Function GetSQLConnection(strServInst)
+  Set GetSQLConnection = FBUtils.GetSQLConnection(strServInst)
+End Function
+
+Function GetSQLData(strCmd, strCmdItem)
+  GetSQLData        = FBUtils.GetSQLData(strCmd, strCmdItem)
+End Function
+
 Function Max(intA, intB)
   Max               = FBUtils.Max(intA, intB)
 End Function
@@ -906,28 +621,8 @@ Function Min(intA, intB)
   Min               = FBUtils.Min(intA, intB)
 End Function
 
-Sub ResetDBAFilePerm(strFolder)
-  Call FBUtils.ResetDBAFilePerm(strFolder)
-End Sub
-
-Sub ResetFilePerm(strFolder, strAccount)
-  Call FBUtils.ResetFilePerm(strFolder, strAccount)
-End Sub
-
-Sub RunCacls(strCmd)
-  Call FBUtils.RunCacls(strCmd)
-End Sub
-
 Sub SetupFolder(strFolder)
   Call FBUtils.SetupFolder(strFolder)
-End Sub
-
-Sub SetDCOMSecurity(strAppId)
-  Call FBUtils.SetDCOMSecurity(strAppId)
-End Sub
-
-Sub SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
-   Call FBUtils.SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
 End Sub
 
 Sub SetUpdate(strOnOff)
