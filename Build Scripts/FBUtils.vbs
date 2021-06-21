@@ -225,7 +225,7 @@ End Function
 
 
 Function GetSQLData(strCmd, strCmdItem)
-  Call DebugLog("GetSQLData: " & strCmdItem)
+  Call DebugLog("GetSQLData: " & strCmd & ": " & strCmdItem)
 
   Set objSQLData    = objSQL.Execute(strCmd)
   objSQLData.MoveFirst

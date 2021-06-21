@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageLog.vbs  
-'  Copyright FineBuild Team © 2017 - 2020.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2017 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Manage the FineBuild Log File 
 '
@@ -360,9 +360,9 @@ Sub ProcessEnd(strStatus)
   End If
 
   Select Case True
-    Case strRestart < strProcessIdLabel
+    Case strRestart >= strProcessIdLabel
       ' Nothing
-    Case strStopat = ""
+    Case strStopAt = ""
       ' Nothing
     Case strStopAt = "AUTO"
       err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
