@@ -567,30 +567,31 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   End If
 
   strDebugMsg1      = "Log file: " & strPathLog
-  strTempClean      = "Y"
+  strTempClean      = ""
   Call Util_RunExec(strPathCmd, strInstPrompt, strResponseYes, -1)
   Select Case True
     Case intErrSave = 0
-      ' Nothing
+      strTempClean  = "Y"
     Case intErrSave = 3010
       Call SetBuildfileValue("RebootStatus", "Pending")
       intErrSave    = 0
+      strTempClean  = "Y"
     Case (intErrSave = 5) And (strInstType = ".MSU")
-      Exit Function
+      ' Nothing
     Case intErrSave = 1642
-      Exit Function
+      ' Nothing
     Case intErrSave = -1073741818
       Call DebugLog("Retrying " & strInstName & " Install - Network connectivity workaround")
       Wscript.Sleep strWaitShort
       Call Util_RunExec(strCmd, "", "", 0)
+      strTempClean  = "Y"
     Case (strParmRetry <> "0") And (Instr(" " & strParmRetry & " ", " " & Cstr(intErrSave) & " ") > 0)
       Call DebugLog("Retrying " & strInstName & " Install due to code " & Cstr(intErrSave))
       Wscript.Sleep strWaitShort
       Call Util_RunExec(strCmd, "", "", 0)
-    Case intErrSave = -2147205120 ' Install blocked
-      strTempClean  = ""
+      strTempClean  = "Y"
     Case Else
-      strTempClean  = ""
+      ' Nothing
   End Select
 
   Select Case True
@@ -617,7 +618,9 @@ Private Function RunInstall_Process(strInstName, objInstParm)
       End If
   End Select
 
-  RunInstall_Process = True
+  If intErrSave = 0 Then
+    RunInstall_Process = True
+  End If
 
 End Function
 

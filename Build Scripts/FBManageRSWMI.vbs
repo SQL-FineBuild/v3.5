@@ -218,7 +218,7 @@ Private Sub SetRSSSL(strFunction, objRSInParam, strURLVar, strHost)
   Call DebugLog("SetRSURLItem: " & strHost) ' see https://community.certifytheweb.com/t/sql-server-reporting-services-ssrs/332.  Also IIS needs to be configured
   Dim strURL
 
-  strURL             = strHTTP & "://*:" & strTCPPortRS
+  strURL             = strHTTP & "://*:" & GetBuildfileValue("TCPPortSSL")
   strDebugMsg1       = "URL: " & strURL
   objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL
   Call RunRSWMI(strFunction, "-2147220932") ' OK if URL already exists

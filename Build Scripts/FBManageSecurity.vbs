@@ -137,11 +137,11 @@ Function FormatAccount(strAccount)
 End Function
 
 
-Function FormatAlias(strAliasParm, strFDQN)
-  Call DebugLog("FormatAlias: " & strAliasParm)
+Function FormatHost(strHostParm, strFDQN)
+  Call DebugLog("FormatHost: " & strHostParm)
   Dim strAlias, strUserDomain, strUserDNSDomain
 
-  strAlias          = strAliasParm
+  strAlias          = strHostParm
   strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
   If strUserDNSDomain <> "" Then
     strUserDNSDomain = "." & strUserDNSDomain
@@ -155,7 +155,7 @@ Function FormatAlias(strAliasParm, strFDQN)
     strAlias        = strAlias & strUserDNSDomain
   End If
 
-  FormatAlias       = strAlias
+  FormatHost       = strAlias
 
 End Function
 
@@ -850,8 +850,8 @@ Function FormatAccount(strAccount)
   FormatAccount     = FBManageSecurity.FormatAccount(strAccount)
 End Function
 
-Function FormatAlias(strAliasParm, strFDQN)
-  FormatAlias       = FBManageSecurity.FormatAlias(strAliasParm, strFDQN)
+Function FormatHost(strHostParm, strFDQN)
+  FormatHost       = FBManageSecurity.FormatHost(strHostParm, strFDQN)
 End Function
 
 Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)

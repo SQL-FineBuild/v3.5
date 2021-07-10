@@ -1,18 +1,23 @@
--- Copyright FineBuild Team © 2021.  Distributed under Ms-Pl License
+﻿-- Copyright FineBuild Team © 2021.  Distributed under Ms-Pl License
 --
 -- Rebuild the PolyBase proxy authorisations
--- Based on a script from Microsoft Support
+-- Based on a script from Microsoft Support, amended to be Idempotent and to use parameter values
 --
 -- This proces is needed because CREATE CERTIFICATE processing appears to be partly asynchronous, 
 -- and on a fast server the CREATE CERTIFICATE processing may not complete before the subsequent
--- commands which prevents them from working.  This condition does not trigger an error in the 
--- Microsoft PolyBase install, so the relevant processing is repeated here.
+-- commands, which prevents them from working.  This condition does not trigger an error in the 
+-- Microsoft PolyBase install, so the relevant processing is repeated here to ensure the relevant
+-- accounts and permissions are created.
 
 USE [DWConfiguration]
 GO
 IF DATABASEPROPERTYEX('DWConfiguration', 'Updateability') = 'READ_WRITE'
 BEGIN;
-    CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)];
+    IF DATABASE_PRINCIPAL_ID('$(strPBSvcAcnt)') IS NULL
+    BEGIN;
+        CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)];
+    END;
+
     ALTER ROLE [db_datareader] ADD MEMBER [$(strPBSvcAcnt)];
     ALTER ROLE [db_datawriter] ADD MEMBER [$(strPBSvcAcnt)];
 END;
@@ -21,7 +26,11 @@ USE [DWQueue]
 GO
 IF DATABASEPROPERTYEX('DWQueue', 'Updateability') = 'READ_WRITE'
 BEGIN;
-    CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)];
+    IF DATABASE_PRINCIPAL_ID('$(strPBSvcAcnt)') IS NULL
+    BEGIN;
+        CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)];
+    END;
+
     ALTER ROLE [db_datareader] ADD MEMBER [$(strPBSvcAcnt)];
     ALTER ROLE [db_datawriter] ADD MEMBER [$(strPBSvcAcnt)];
 
@@ -43,7 +52,11 @@ USE [DWDiagnostics]
 GO
 IF DATABASEPROPERTYEX('DWDiagnostics', 'Updateability') = 'READ_WRITE'
 BEGIN;
-    CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)];
+    IF DATABASE_PRINCIPAL_ID('$(strPBSvcAcnt)') IS NULL
+    BEGIN;
+        CREATE USER [$(strPBSvcAcnt)] FOR LOGIN [$(strPBSvcAcnt)];
+    END;
+
     ALTER ROLE [db_datareader] ADD MEMBER [$(strPBSvcAcnt)];
     ALTER ROLE [db_datawriter] ADD MEMBER [$(strPBSvcAcnt)];
     ALTER ROLE [db_ddladmin] ADD MEMBER [$(strPBSvcAcnt)];
@@ -63,35 +76,30 @@ BEGIN;
     END;
 
     PRINT 'CREATE PROCEDURE [sp_pdw_sm_detach]';
-    CREATE PROCEDURE [sp_pdw_sm_detach]
-    -- Parameters
-    @FileName nvarchar(45)  -- shared memory name
+    EXECUTE(N'CREATE PROCEDURE [sp_pdw_sm_detach]
+    @FileName nvarchar(45)  /* shared memory name */
     AS
     BEGIN;
         SET NOCOUNT ON;
         EXEC [sp_sm_detach] @FileName;
-    END;
-
+    END;');
     GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_sm_detach] TO [$(strPBSvcAcnt)];
-END;
-GO
 
---Create a certificate and sign the procedure with a password unique to the Failover group
-IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_SmDetachSigningCertificate##') 
+    --Create a certificate and sign the procedure with a password unique to the Failover group
+    IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_SmDetachSigningCertificate##') 
     BEGIN;
-    PRINT 'DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##';
-    DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##;
+        PRINT 'DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##';
+        DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##;
     END;
-GO
-PRINT 'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate##';
-DECLARE @certpasswordDCB nvarchar(max);
-SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
-EXECUTE(N'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_sm_detach SP'';');
 
-EXECUTE(N'ADD SIGNATURE to [sp_pdw_sm_detach] BY CERTIFICATE _##PDW_SmDetachSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
-GO
-WAITFOR DELAY '00:00:01';
-ALTER CERTIFICATE _##PDW_SmDetachSigningCertificate## REMOVE PRIVATE KEY;
+    PRINT 'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate##';
+    DECLARE @certpasswordDCB nvarchar(max);
+    SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
+    EXECUTE(N'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_sm_detach SP'';');
+    WAITFOR DELAY '00:00:01';
+    EXECUTE(N'ADD SIGNATURE to [sp_pdw_sm_detach] BY CERTIFICATE _##PDW_SmDetachSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
+    ALTER CERTIFICATE _##PDW_SmDetachSigningCertificate## REMOVE PRIVATE KEY;
+END;
 GO
 
 DECLARE @certBinaryBytes varbinary(max);
@@ -114,7 +122,7 @@ WAITFOR DELAY ''00:00:01'';
 PRINT ''CREATE LOGIN [l_certSignSmDetach]'';
 CREATE LOGIN [l_certSignSmDetach] FROM CERTIFICATE [_##PDW_SmDetachSigningCertificate##];
 ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignSmDetach];'
-EXEC(@cmd)
+EXEC(@cmd);
 GO
 
 --***** 
@@ -131,34 +139,30 @@ BEGIN;
     END;
 
     PRINT 'CREATE PROCEDURE [sp_pdw_polybase_authorize]';
-    CREATE PROCEDURE [sp_pdw_polybase_authorize]
-    -- Parameters
+    EXECUTE(N'CREATE PROCEDURE [sp_pdw_polybase_authorize]
     @AppName nvarchar(max)
     AS
     BEGIN;
         SET NOCOUNT ON;
         EXEC [sp_polybase_authorize] @AppName;
-    END;
-
+    END;');
     GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_polybase_authorize] TO [$(strPBSvcAcnt)];
-END;
-GO
 
---Create a certificate and sign the procedure with a password unique to the Failover group
-IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_PolyBaseAuthorizeSigningCertificate##') 
+    --Create a certificate and sign the procedure with a password unique to the Failover group
+    IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_PolyBaseAuthorizeSigningCertificate##') 
     BEGIN;
-    PRINT 'DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
-    DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##;
+        PRINT 'DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
+        DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##;
     END;
-GO
-PRINT 'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
-DECLARE @certpasswordDCB nvarchar(max);
-SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
-EXECUTE(N'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_polybase_authorize SP'';');
-EXECUTE(N'ADD SIGNATURE to [sp_pdw_polybase_authorize] BY CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
-GO
-WAITFOR DELAY '00:00:01';
-ALTER CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## REMOVE PRIVATE KEY;
+
+    PRINT 'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
+    DECLARE @certpasswordDCB nvarchar(max);
+    SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
+    EXECUTE(N'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_polybase_authorize SP'';');
+    WAITFOR DELAY '00:00:01';
+    EXECUTE(N'ADD SIGNATURE to [sp_pdw_polybase_authorize] BY CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
+    ALTER CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## REMOVE PRIVATE KEY;
+END;
 GO
 
 DECLARE @certBinaryBytes varbinary(max);
@@ -181,5 +185,5 @@ WAITFOR DELAY ''00:00:01'';
 PRINT ''CREATE LOGIN [l_certSignPolyBaseAuthorize]'';
 CREATE LOGIN [l_certSignPolyBaseAuthorize] FROM CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##];
 ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignPolyBaseAuthorize];'
-EXEC(@cmd)
+EXEC(@cmd);
 GO
