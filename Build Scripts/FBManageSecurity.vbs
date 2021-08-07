@@ -18,7 +18,7 @@ Option Explicit
 Dim FBManageSecurity: Set FBManageSecurity = New FBManageSecurityClass
 
 Class FBManageSecurityClass
-Dim objADOCmd, objADOConn, objCertUtil, objFolder, objFSO, objFW, objFWRules, objRecordSet, objSDUtil, objWMIReg
+Dim objADOCmd, objADOConn, objExec, objFolder, objFSO, objFW, objFWRules, objRecordSet, objSDUtil, objShell, objWMIReg
 Dim arrProfFolders, arrProfUsers
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
@@ -34,6 +34,7 @@ Private Sub Class_Initialize
   Set objFW         = CreateObject("HNetCfg.FwPolicy2")
   Set objFWRules    = objFW.Rules
   Set objSDUtil     = CreateObject("ADsSecurityUtility")
+  Set objShell      = CreateObject("Wscript.Shell")
   Set objWMIReg     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\default:StdRegProv")
 
   strHKLM           = &H80000002
@@ -75,10 +76,7 @@ Sub BackupDBMasterKey(strDB, strPassword)
   Dim strPathNew
 
   strPathNew        = strDirSystemDataBackup & "\" & strDB & "DBMasterKey.snk"
-  If objFSO.FileExists(strPathNew) Then
-    Call objFSO.DeleteFile(strPathNew, True)
-    Wscript.Sleep strWaitShort
-  End If
+  Call DeleteFile(strPathNew)
 
   Call Util_ExecSQL(strCmdSQL & "-d """ & strDB & """ -Q", """BACKUP MASTER KEY TO FILE='" & strPathNew & "' ENCRYPTION BY PASSWORD='" & strPassword & "';""", 0)
 
@@ -243,26 +241,10 @@ End Function
 
 Function GetCertThumbprint(strCertName)
   Call DebugLog("GetCertThumbprint: " & strCertName)
-  Dim arrCerts, arrCert
-  Dim objCert
-  Dim strCertBlob, strPathCert
 
-  GetCertThumbprint = ""
-  strPathCert       = "SOFTWARE\Microsoft\SystemCertificates\My\Certificates"
-  objWMIReg.EnumKey strHKLM, strPathCert, arrCerts
-
-  Select Case True
-    Case IsNull(arrCerts)
-      ' Nothing
-    Case Else
-      For intIdx = 0 To UBound(arrCerts) - 1
-        objWMIReg.GetBinaryValue strHKLM,strPathCert & "\" & arrCerts(intIdx), "Blob",arrCert
-        Set objCert = objCertUtil.X509Certificate2(arrCert)
-        If objCert.FriendlyName = strCertName Then
-          GetCertThumbprint = objCert.Thumbprint
-        End If
-      Next
-  End Select
+  strCmd            = "POWERSHELL (Get-ChildItem -Path Cert:\LocalMachine\My ^| Where-Object {$_.FriendlyName -match '" & strCertName & "'}).Thumbprint"
+  Set objExec       = objShell.Exec(strCmd)
+  GetCertThumbprint = LCase(objExec.StdOut.ReadAll)
 
 End Function
 

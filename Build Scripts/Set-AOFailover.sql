@@ -1,4 +1,4 @@
---  Copyright FineBuild Team © 2018-2020.  Distributed under Ms-Pl License
+--  Copyright FineBuild Team © 2018-2021.  Distributed under Ms-Pl License
 USE master
 GO
 
@@ -59,9 +59,10 @@ BEGIN;
   VALUES(@AGName,@TargetServer);
 
   INSERT INTO @AGServers (AGName, AG_Id, AGType, AvailabilityMode, RequiredCommit, PrimaryServer, PrimaryEndpoint, Primary_Id, SecondaryServer,  SecondaryEndpoint, Secondary_Id, ServerId)
+  SELECT *,ROW_NUMBER() OVER(PARTITION BY AGName ORDER BY SecondaryServer) AS ServerId
   FROM (SELECT
      ag.name AS AGName
-    ,ag.group_id AS AG_Id
+    ,ag.Group_id AS AG_Id
     ,CASE WHEN ag.is_distributed = 1 THEN 'D' WHEN ag.basic_features = 1 THEN 'B' WHEN ag.cluster_type_desc = 'none' THEN 'N' ELSE 'C' END AS AGType
     ,ars.availability_mode
     ,ISNULL(ag.required_synchronized_secondaries_to_commit, 0) AS RequiredCommit
@@ -76,12 +77,12 @@ BEGIN;
     FROM [sys].[availability_groups] ag  
     JOIN [sys].[availability_replicas] arp ON arp.group_id = ag.group_id
     LEFT JOIN [sys].[dm_hadr_availability_replica_states] arps ON arps.group_id = arp.group_id AND arps.replica_id = arp.replica_id
-    LEFT JOIN [sys].[availability_groups] agpl ON agpl.name = CASE WHEN ag.is_distributed = 1 THEN arp.replica_server_name ELSE ag.name END
+    LEFT JOIN [sys].[availability_groups] agpl ON agpl.name = arp.replica_server_name
     LEFT JOIN [sys].[dm_hadr_availability_replica_states] arpsl ON arpsl.group_id = agpl.group_id AND arpsl.is_local = 1
     LEFT JOIN [sys].[availability_replicas] arpl ON arpl.group_id = arpsl.group_id AND arpl.replica_id = arpsl.replica_id
     JOIN [sys].[availability_replicas] ars ON ars.group_id = ag.group_id
     LEFT JOIN [sys].[dm_hadr_availability_replica_states] arss ON arss.group_id = ars.group_id AND arss.replica_id = ars.replica_id
-    LEFT JOIN [sys].[availability_groups] agsl ON agsl.name = CASE WHEN ag.is_distributed = 1 THEN ars.replica_server_name ELSE ag.name END
+    LEFT JOIN [sys].[availability_groups] agsl ON agsl.name = ars.replica_server_name
     LEFT JOIN [sys].[dm_hadr_availability_replica_states] arssl ON arssl.group_id = agsl.group_id AND arssl.is_local = 1
     LEFT JOIN [sys].[availability_replicas] arsl ON arsl.group_id = agsl.group_id AND arsl.replica_id = arssl.replica_id
     ) AS ag
@@ -95,6 +96,8 @@ BEGIN;
   RETURN;
 
 END;
+GO
+ALTER AUTHORIZATION ON [dbo].[FB_GetAGServers] TO  SCHEMA OWNER;
 GO
 
 -- Process FB_AGFailover Procedure
@@ -352,6 +355,8 @@ BEGIN;
   END;
 
 END;
+GO
+ALTER AUTHORIZATION ON [dbo].[FB_AGFailover] TO  SCHEMA OWNER;
 GO
 
 -- Create table for Database Owner Mappings

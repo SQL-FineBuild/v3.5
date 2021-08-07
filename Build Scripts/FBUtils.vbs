@@ -72,6 +72,17 @@ Sub CopyFile(strSource, strTarget)
 End Sub
 
 
+Sub DeleteFile(strFile)
+  Call DebugLog("DeleteFile: " & strFile)
+
+  If objFSO.FileExists(strFile) Then
+    Call objFSO.DeleteFile(strFile, True)
+    Wscript.Sleep strWaitShort
+  End If
+
+End Sub
+
+
 Function FormatFolder(strFolder)
   Call DebugLog("FormatFolder: " & strFolder)
   Dim strFBLocal, strFBRemote, strFolderPath
@@ -131,7 +142,7 @@ Function FormatServer(strServer, strProtocol)
 
   strServerWork     = strServer
   If strProtocol <> "" Then
-    strServerWork   = strProtocol & "://" & strServerWork & "." & GetBuildfileValue("UserDNSDomain")
+    strServerWork   = strProtocol & "://" & FormatHost(strServerWork, "F")
   End If
 
   FormatServer      = strServerWork
@@ -238,11 +249,16 @@ Sub SetupFolder(strFolder)
   Call DebugLog("SetupFolder: " & strFolder)
   Dim strPath, strPathParent
 
-  strPath           = strFolder
-  If Right(strPath, 1) = "\" Then
-    strPath         = Left(strPath, Len(strPath) - 1)
-  End If
+  Select Case True
+    Case strFolder = ""
+      Exit Sub
+    Case Right(strFolder, 1) = "\" 
+      strPath       = Left(strFolder, Len(strFolder) - 1)
+    Case Else
+      strPath       = strFolder
+  End Select
   strPathParent     = Left(strPath, InstrRev(strPath, "\") - 1)
+  strDebugMsg1      = "PathParent: " & strPathParent
 
   Select Case True
     Case objFSO.FolderExists(strPath)
@@ -251,10 +267,10 @@ Sub SetupFolder(strFolder)
       Call SetupFolder(strPathParent)
       Wscript.Sleep GetBuildfileValue("WaitMed")
       objFSO.CreateFolder(strPath)
-      Wscript.Sleep GetBuildfileValue("WaitShort")
+      Wscript.Sleep strWaitShort
     Case Else
       objFSO.CreateFolder(strPath)
-      Wscript.Sleep GetBuildfileValue("WaitShort")
+      Wscript.Sleep strWaitShort
   End Select
 
 End Sub
@@ -587,6 +603,10 @@ End Class
 
 Sub CopyFile(strSource, strTarget)
   Call FBUtils.CopyFile(strSource, strTarget)
+End Sub
+
+Sub DeleteFile(strFile)
+  Call FBUtils.DeleteFile(strFile)
 End Sub
 
 Function FormatFolder(strFolder)

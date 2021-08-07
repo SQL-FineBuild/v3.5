@@ -109,6 +109,20 @@ Function SetRSInParam(strFunction)
 End Function
 
 
+Sub SetRSDatabase(strServer, strRSDBName)
+  Call DebugLog("SetRSDatabase: " & strRSDBName & " on "  & strServer)
+
+  strFunction       = SetRSInParam("SetDatabaseConnection")
+  objRSInParam.Properties_.Item("Server")            = strServer
+  objRSInParam.Properties_.Item("DatabaseName")      = strRSDBName
+  objRSInParam.Properties_.Item("CredentialsType")   = 2 ' Use Windows Service account
+  objRSInParam.Properties_.Item("UserName")          = ""
+  objRSInParam.Properties_.Item("Password")          = ""
+  Call RunRSWMI(strFunction, "")
+
+End Sub
+
+
 Sub SetRSDirectory(strApplication, strDirectory)
   Call DebugLog("SetRSDirectory: " & strApplication & ", " & strDirectory)
   Dim strStoreNamespace
@@ -262,6 +276,10 @@ End Class
 Function RunRSWMI(strFunction, strOK)
   RunRSWMI        = FBManageRSWMI.RunRSWMI(strFunction, strOK)
 End Function
+
+Sub SetRSDatabase(strServer, strRSDBName)
+  Call FBManageRSWMI.SetRSDatabase(strServer, strRSDBName)
+End Sub
 
 Sub SetRSDirectory(strApplication, strDirectory)
   Call FBManageRSWMI.SetRSDirectory(strApplication, strDirectory)

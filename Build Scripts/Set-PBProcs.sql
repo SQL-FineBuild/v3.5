@@ -94,7 +94,7 @@ BEGIN;
 
     PRINT 'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate##';
     DECLARE @certpasswordDCB nvarchar(max);
-    SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
+    SET @certpasswordDCB = QUOTENAME(N'$(strPBCertPassword)', N'''');
     EXECUTE(N'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_sm_detach SP'';');
     WAITFOR DELAY '00:00:01';
     EXECUTE(N'ADD SIGNATURE to [sp_pdw_sm_detach] BY CERTIFICATE _##PDW_SmDetachSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
@@ -157,7 +157,7 @@ BEGIN;
 
     PRINT 'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
     DECLARE @certpasswordDCB nvarchar(max);
-    SET @certpasswordDCB = QUOTENAME($(strPBCertPassword), N'''');
+    SET @certpasswordDCB = QUOTENAME(N'$(strPBCertPassword)', N'''');
     EXECUTE(N'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_polybase_authorize SP'';');
     WAITFOR DELAY '00:00:01';
     EXECUTE(N'ADD SIGNATURE to [sp_pdw_polybase_authorize] BY CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
