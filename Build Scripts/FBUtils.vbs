@@ -22,7 +22,7 @@ Dim strErrSave, strResponseYes, strResponseNo
 
 Class FBUtilsClass
 
-Dim objAutoUpdate, objFile, objFSO, objShell, objSQL, objSQLData, objWMI, objWMIReg
+Dim objAutoUpdate, objExec, objFile, objFSO, objShell, objSQL, objSQLData, objWMI, objWMIReg
 Dim colPrcEnvVars
 Dim intIdx
 Dim strCmd, strCmdPS, strCmdSQL
@@ -216,6 +216,16 @@ Function GetCmdSQL()
   Call SetBuildfileValue("RegTools",   strRegTools)
 
   GetCmdSQL         = strCmdSQL
+
+End Function
+
+
+Function GetPSOutput(strCmd)
+  Call DebugLog("GetPSOutput: " & strCmd)
+
+  Set objExec       = objShell.Exec("POWERSHELL " & strCmd)
+  objExec.StdIn.Close
+  GetPSOutput       = objExec.StdOut.ReadAll
 
 End Function
 
@@ -619,6 +629,10 @@ End Function
 
 Function FormatServer(strServer, strProtocol)
   FormatServer      = FBUtils.FormatServer(strServer, strProtocol)
+End Function
+
+Function GetPSOutput(strCmd)
+  GetPSOutput       = FBUtils.GetPSOutput(strCmd)
 End Function
 
 Function GetCmdSQL()

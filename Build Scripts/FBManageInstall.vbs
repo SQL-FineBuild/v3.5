@@ -59,7 +59,7 @@ Dim strPathInst
 
 Class FBManageInstallClass
 Dim objFile, objFolder, objFSO, strLogXtra, objShell, objWMIReg
-Dim strPathAddComp, strStatusVar, strWaitShort
+Dim strPathAddComp, strStatusFile, strStatusVar, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -91,6 +91,9 @@ Sub RunInstall(strInstName, strInstFile, objInstParm)
       strStatusOption = GetXMLParm(objInstParm, "StatusOption", strStatusProgress)
   End Select
   Call SetBuildFileValue(strStatusVar, strStatusProgress)
+
+  strStatusFile     = "Setup" & strInstName & strLogXtra & "File"
+  Call SetBuildFileValue(strStatusFile, strInstFile)
 
   Select Case True
     Case RunInstall_PreCon(strInstName, strInstFile, objInstParm) 

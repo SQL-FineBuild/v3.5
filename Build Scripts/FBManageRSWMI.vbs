@@ -23,7 +23,8 @@ Dim intRSLcid
 
 Class FBManageRSWMIClass
   Dim objRSConfig, objRSWMI, objShell
-  Dim strFunction, strHTTP, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSWMIPath, strSetupPowerBI, strSetupSSL, strSetupSQLRSCluster, strTCPPortRS, strSQLVersion, strWMIPath
+  Dim strFunction, strHTTP, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSNetName, strRSWMIPath
+  Dim strServer, strSetupPowerBI, strSetupSSL, strSetupSQLRSCluster, strSSLCertThumb, strTCPPortRS, strTCPPortSSL, strSQLVersion, strWMIPath
 
 
 Private Sub Class_Initialize
@@ -39,12 +40,16 @@ Private Sub Class_Initialize
   strOSVersion      = GetBuildfileValue("OSVersion")
   strRSAlias        = GetBuildfileValue("RSAlias")
   strRSNamespace    = "MSReportServer_ConfigurationSetting"
+  strRSNetName      = GetBuildfileValue("RSNetName")
   strRSVersionNum   = GetBuildfileValue("RSVersionNum")
+  strServer         = GetBuildfileValue("AuditServer")
   strSetupPowerBI   = GetBuildfileValue("SetupPowerBI")
   strSetupSSL       = GetBuildfileValue("SetupSSL")
   strSetupSQLRSCluster = GetBuildfileValue("SetupSQLRSCluster")
   strSQLVersion     = GetBuildfileValue("SQLVersion")
+  strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
   strTCPPortRS      = GetBuildfileValue("TCPPortRS")
+  strTCPPortSSL     = GetBuildfileValue("TCPPortSSL")
 
   Select Case True
     Case strSQLVersion <= "SQL2005"
@@ -171,7 +176,7 @@ End Sub
 
 Private Sub SetRSURL(strApplication, strDirectory)
   Call DebugLog("SetRSURL: " & strApplication)
-  Dim strClusterIPV4RS, strClusterIPV6RS, strStoreNamespace, strURLVar
+  Dim strStoreNamespace, strURLVar
 
   strStoreNamespace = strRSNamespace
 
@@ -194,33 +199,57 @@ Private Sub SetRSURL(strApplication, strDirectory)
       strURLVar      = "URLString"
   End Select
 
+  Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strServer, strApplication)
+  If strRSNetName <> strServer Then
+    Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strRSNetName, strApplication)
+  End If
+
+  strRSNamespace    = strStoreNamespace
+
+End Sub
+
+
+Private Sub SetRSURLItem(strFunction, objRSInParam, strURLVar, strHost, strApplication)
+  Call DebugLog("SetRSURLItem: " & strHost)
+  Dim strURL
+
   Select Case True
-'    Case strSetupSSL = "YES"
-'      Call SetRSSSL(strFunction, objRSInParam, strURLVar, strRSAlias)
-    Case strRSAlias <> ""
-      Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strRSAlias)
-    Case strSetupSQLRSCluster = "YES"
-      Call SetRSURLItem(strFunction, objRSInParam, strURLVar, GetBuildfileValue("ClusterGroupRS"))
+    Case strHost = strServer
+      strURL         = "HTTP://" & UCase(strHost) & ":" & strTCPPortRS
+    Case strSetupSSL = "YES"
+      strURL         = "HTTPS://+:" & strTCPPortSSL
+      Call SetRSSSLBind(strApplication)
+    Case Else
+      strURL         = "HTTP://" & UCase(strHost) & ":" & strTCPPortRS
   End Select
 
-  Call SetRSURLItem(strFunction, objRSInParam, strURLVar, GetBuildfileValue("AuditServer"))
+  strDebugMsg1       = "URL: " & strURL
+  objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL
+  Call RunRSWMI(strFunction, "-2147220932") ' OK if URL already exists
 
-  strClusterIPV4RS = GetBuildfileValue("ClusterIPV4RS")
-  Select Case True
-    Case strClusterIPV4RS = ""
-      ' Nothing
-    Case Else
-      Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strClusterIPV4RS)
-  End Select
+End Sub
 
-  strClusterIPV6RS = GetBuildfileValue("ClusterIPV6RS")
+
+Sub SetRSSSL()
+  Call DebugLog("SetRSSSL:")
+  Dim strStoreNamespace
+
+  strStoreNamespace = strRSNamespace
+
   Select Case True
-    Case strClusterIPV6RS = ""
-      ' Nothing
-    Case strSQLVersion < "SQL2012"
-      ' Nothing
+    Case strSQLVersion <= "SQL2005"
+      strRSNamespace = "MSReportManager_ConfigurationSetting"
+      Call SetRSSSLBind("ReportServerWebService")  
+      Call SetRSSSLBind("ReportManager") 
+    Case strSetupPowerBI = "YES"
+      Call SetRSSSLBind("ReportServerWebService")  
+      Call SetRSSSLBind("ReportServerWebApp") 
+    Case strSQLVersion >= "SQL2016"
+      Call SetRSSSLBind("ReportServerWebService")  
+      Call SetRSSSLBind("ReportServerWebApp") 
     Case Else
-      Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strClusterIPV6RS)
+      Call SetRSSSLBind("ReportServerWebService")   
+      Call SetRSSSLBind("ReportManager") 
   End Select
 
   strRSNamespace    = strStoreNamespace
@@ -228,26 +257,18 @@ Private Sub SetRSURL(strApplication, strDirectory)
 End Sub
 
 
-Private Sub SetRSSSL(strFunction, objRSInParam, strURLVar, strHost)
-  Call DebugLog("SetRSURLItem: " & strHost) ' see https://community.certifytheweb.com/t/sql-server-reporting-services-ssrs/332.  Also IIS needs to be configured
-  Dim strURL
+Private Sub SetRSSSLBind(strApplication)
+  Call DebugLog("SetRSSSLBind: " & strApplication) 
+' See https://community.certifytheweb.com/t/sql-server-reporting-services-ssrs/332.  Also IIS needs to be configured
+  Dim strFunction
 
-  strURL             = strHTTP & "://*:" & GetBuildfileValue("TCPPortSSL")
-  strDebugMsg1       = "URL: " & strURL
-  objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL
-  Call RunRSWMI(strFunction, "-2147220932") ' OK if URL already exists
-
-End Sub
-
-
-Private Sub SetRSURLItem(strFunction, objRSInParam, strURLVar, strHost)
-  Call DebugLog("SetRSURLItem: " & strHost)
-  Dim strURL
-
-  strURL             = strHTTP & "://" & UCase(strHost) & ":" & strTCPPortRS
-  strDebugMsg1       = "URL: " & strURL
-  objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL
-  Call RunRSWMI(strFunction, "-2147220932") ' OK if URL already exists
+  strFunction        = SetRSInParam("CreateSSLCertificateBinding")
+  objRSInParam.Properties_.Item("Application")                  = strApplication
+  objRSInParam.Properties_.Item("CertificateHash")              = strSSLCertThumb
+  objRSInParam.Properties_.Item("IPAddress")                    = "0.0.0.0"
+  objRSInParam.Properties_.Item("Port")                         = strTCPPortSSL
+  objRSInParam.Properties_.Item("Lcid")                         = intRSLcid
+  Call RunRSWMI(strFunction, "-2147220932") ' OK if Binding already exists
 
 End Sub
 
@@ -288,3 +309,7 @@ End Sub
 Function SetRSInParam(strFunction)
   SetRSInParam      = FBManageRSWMI.SetRSInParam(strFunction)
 End Function
+
+Sub SetRSSSL()
+  Call FBManageRSWMI.SetRSSSL()
+End Sub

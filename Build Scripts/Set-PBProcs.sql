@@ -3,11 +3,18 @@
 -- Rebuild the PolyBase proxy authorisations
 -- Based on a script from Microsoft Support, amended to be Idempotent and to use parameter values
 --
--- This proces is needed because CREATE CERTIFICATE processing appears to be partly asynchronous, 
--- and on a fast server the CREATE CERTIFICATE processing may not complete before the subsequent
--- commands, which prevents them from working.  This condition does not trigger an error in the 
--- Microsoft PolyBase install, so the relevant processing is repeated here to ensure the relevant
--- accounts and permissions are created.
+-- This process is needed for two reasons:
+-- 1. The CREATE CERTIFICATE processing appears to be partly asynchronous
+--    On a fast server the CREATE CERTIFICATE processing may not complete before the subsequent
+--    commands, which prevents them from working.  This condition does not trigger an error in the 
+--    Microsoft PolyBase install, so the relevant processing is repeated here to ensure the relevant
+--    accounts and permissions are created.
+-- 2. The guid value used as the Certificate Password must be the same on all servers in the failover set
+--    The Microsoft code generates a unique guid value for each server it is run on, but
+--    this causes problems when the servers are in a Distributed Availability Group set or
+--    an Availability Group set.  The main symptom is that the Polybase DMS service will fail
+--    on secondary servers.  The calling process for this script works out the correct
+--    value for the Certificate Password and passes this as a parameter to this routine.
 
 USE [DWConfiguration]
 GO
@@ -106,22 +113,22 @@ DECLARE @certBinaryBytes varbinary(max);
 SET @certBinaryBytes = CERTENCODED(cert_id('_##PDW_SmDetachSigningCertificate##')); 
 DECLARE @cmd nvarchar(max)
 SET @cmd = N'use master;
-IF EXISTS (SELECT * FROM [sys].[server_principals] WHERE name = N''l_certSignSmDetach'' AND type = N''C'') 
-    BEGIN;
-    PRINT ''DROP LOGIN l_certSignSmDetach'';
-    DROP LOGIN l_certSignSmDetach;
-    END;
-IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N''_##PDW_SmDetachSigningCertificate##'') 
-    BEGIN;
-    PRINT ''DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##'';
-    DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##;
-    END;
-PRINT ''CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate##'';
-CREATE CERTIFICATE [_##PDW_SmDetachSigningCertificate##] FROM BINARY = ' + sys.fn_varbintohexstr(@certBinaryBytes) + N'
-WAITFOR DELAY ''00:00:01'';
-PRINT ''CREATE LOGIN [l_certSignSmDetach]'';
-CREATE LOGIN [l_certSignSmDetach] FROM CERTIFICATE [_##PDW_SmDetachSigningCertificate##];
-ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignSmDetach];'
+  IF EXISTS (SELECT * FROM [sys].[server_principals] WHERE name = N''l_certSignSmDetach'' AND type = N''C'') 
+      BEGIN;
+      PRINT ''DROP LOGIN l_certSignSmDetach'';
+      DROP LOGIN l_certSignSmDetach;
+      END;
+  IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N''_##PDW_SmDetachSigningCertificate##'') 
+      BEGIN;
+      PRINT ''DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##'';
+      DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##;
+      END;
+  PRINT ''CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate##'';
+  CREATE CERTIFICATE [_##PDW_SmDetachSigningCertificate##] FROM BINARY = ' + sys.fn_varbintohexstr(@certBinaryBytes) + N'
+  WAITFOR DELAY ''00:00:01'';
+  PRINT ''CREATE LOGIN [l_certSignSmDetach]'';
+  CREATE LOGIN [l_certSignSmDetach] FROM CERTIFICATE [_##PDW_SmDetachSigningCertificate##];
+  ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignSmDetach];'
 EXEC(@cmd);
 GO
 
@@ -169,21 +176,21 @@ DECLARE @certBinaryBytes varbinary(max);
 SET @certBinaryBytes = CERTENCODED(cert_id('_##PDW_PolyBaseAuthorizeSigningCertificate##')); 
 DECLARE @cmd nvarchar(max)
 SET @cmd = N'use master;
-IF EXISTS (SELECT * FROM [sys].[server_principals] WHERE name = N''l_certSignPolyBaseAuthorize'' AND type = N''C'') 
-    BEGIN;
-    PRINT ''DROP LOGIN l_certSignPolyBaseAuthorize'';
-    DROP LOGIN l_certSignPolyBaseAuthorize;
-    END;
-IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N''_##PDW_PolyBaseAuthorizeSigningCertificate##'') 
-    BEGIN;
-    PRINT ''DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##'';
-    DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##;
-    END;
-PRINT ''CREATE CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##]'';
-CREATE CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##] FROM BINARY = ' + sys.fn_varbintohexstr(@certBinaryBytes) + N'
-WAITFOR DELAY ''00:00:01'';
-PRINT ''CREATE LOGIN [l_certSignPolyBaseAuthorize]'';
-CREATE LOGIN [l_certSignPolyBaseAuthorize] FROM CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##];
-ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignPolyBaseAuthorize];'
+  IF EXISTS (SELECT * FROM [sys].[server_principals] WHERE name = N''l_certSignPolyBaseAuthorize'' AND type = N''C'') 
+      BEGIN;
+      PRINT ''DROP LOGIN l_certSignPolyBaseAuthorize'';
+      DROP LOGIN l_certSignPolyBaseAuthorize;
+      END;
+  IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N''_##PDW_PolyBaseAuthorizeSigningCertificate##'') 
+      BEGIN;
+      PRINT ''DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##'';
+      DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##;
+      END;
+  PRINT ''CREATE CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##]'';
+  CREATE CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##] FROM BINARY = ' + sys.fn_varbintohexstr(@certBinaryBytes) + N'
+  WAITFOR DELAY ''00:00:01'';
+  PRINT ''CREATE LOGIN [l_certSignPolyBaseAuthorize]'';
+  CREATE LOGIN [l_certSignPolyBaseAuthorize] FROM CERTIFICATE [_##PDW_PolyBaseAuthorizeSigningCertificate##];
+  ALTER SERVER ROLE sysadmin ADD MEMBER [l_certSignPolyBaseAuthorize];'
 EXEC(@cmd);
 GO

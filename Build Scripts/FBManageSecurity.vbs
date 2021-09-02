@@ -22,7 +22,7 @@ Dim objADOCmd, objADOConn, objExec, objFolder, objFSO, objFW, objFWRules, objRec
 Dim arrProfFolders, arrProfUsers
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
-Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg, strServer, strSIDDistComUsers, strUser, strUserAccount, strWaitShort
+Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg, strServer, strSIDDistComUsers, strSSLCert, strUser, strUserAccount, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -54,6 +54,7 @@ Private Sub Class_Initialize
   strProgReg        = GetBuildfileValue("ProgReg")
   strServer         = GetBuildfileValue("AuditServer")
   strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
+  strSSLCert        = GetBuildfileValue("SSLCert")
   strUserAccount    = GetBuildfileValue("UserAccount")
   strWaitShort      = GetBuildfileValue("WaitShort")
 
@@ -241,10 +242,12 @@ End Function
 
 Function GetCertThumbprint(strCertName)
   Call DebugLog("GetCertThumbprint: " & strCertName)
+  Dim strThumbprint
 
-  strCmd            = "POWERSHELL (Get-ChildItem -Path Cert:\LocalMachine\My ^| Where-Object {$_.FriendlyName -match '" & strCertName & "'}).Thumbprint"
-  Set objExec       = objShell.Exec(strCmd)
-  GetCertThumbprint = LCase(objExec.StdOut.ReadAll)
+  strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.FriendlyName -match '" & strCertName & "'}).Thumbprint"
+  strThumbprint     = GetPSOutput(strCmd)
+  strThumbprint     = Replace(Replace(strThumbprint, Chr(10), ""), Chr(13), "")
+  GetCertThumbprint = LCase(strThumbprint)
 
 End Function
 
@@ -447,6 +450,31 @@ Sub ResetFilePerm(strFolder, strAccount)
     Case Else 
       strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strAccount) & """:F"
       Call SetFilePerm(strCmd)
+  End Select
+
+End Sub
+
+
+Sub SetCertAuth(strCertThumb, strAccount)
+  Call DebugLog("SetCertAuth: " & strCertThumb & strAccount)
+  ' Code based on https://stackoverflow.com/questions/40046916/how-to-grant-permission-to-user-on-certificate-private-key-using-powershell
+  Dim strPKFile
+
+  strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -match '" & strCertThumb & "'}).privatekey.cspkeycontainerinfo.uniquekeycontainername"
+  strPKFile         = GetPSOutput(strCmd)
+  Call DebugLog("PK File>" & strPKFile & "<")
+
+  strPath           = "C:\ProgramData\Microsoft\Crypto\RSA\MachineKeys\" & strPKFile
+  Select Case True
+    Case strPKFile = ""
+      Call SetBuildMessage(strMsgErrorWarn, "PK file for " &  strSSLCert & " not found")
+    Case Not objFSO.FileExists(strPath)
+      Call SetBuildMessage(strMsgErrorWarn, "PK file at """ &  strPath & """ not found")
+    Case Else
+      strCmd        = "POWERSHELL $PkFile='" & strPath & "';"
+      strCmd        = strCmd & "$AclRule=New-Object Security.AccessControl.FileSystemAccessRule " & strAccount & ", read, allow;"
+      strCmd        = strCmd & "{$acl=Get-Acl -path $PkPath;$acl.AddAccessRule(AclRule);Set-Acl $PkPath $acl}"
+      Call Util_RunExec(strCmd, "", "", 0)
   End Select
 
 End Sub
@@ -862,6 +890,10 @@ End Sub
 
 Sub RunCacls(strFolderPerm)
   Call FBManageSecurity.SetFilePerm(strFolderPerm)
+End Sub
+
+Sub SetCertAuth(strCertThumb, strAccount)
+  Call FBManageSecurity.SetCertAuth(strCertThumb, strAccount)
 End Sub
 
 Sub SetDCOMSecurity(strAppId)
