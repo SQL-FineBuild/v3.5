@@ -245,8 +245,7 @@ Function GetCertThumbprint(strCertName)
   Dim strThumbprint
 
   strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.FriendlyName -match '" & strCertName & "'}).Thumbprint"
-  strThumbprint     = GetPSOutput(strCmd)
-  strThumbprint     = Replace(Replace(strThumbprint, Chr(10), ""), Chr(13), "")
+  strThumbprint     = GetPSData(strCmd)
   GetCertThumbprint = LCase(strThumbprint)
 
 End Function
@@ -443,14 +442,73 @@ Sub ResetFilePerm(strFolder, strAccount)
   Select Case True
     Case strAccount = strGroupDBA
       strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strGroupDBA) & """:F"
-      Call SetFilePerm(strCmd)
+      Call RunCacls(strCmd)
     Case strAccount = strGroupDBANonSA
       strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strGroupDBANonSA) & """:R"
-      Call SetFilePerm(strCmd)
+      Call RunCacls(strCmd)
     Case Else 
       strCmd        = """" & strPath & """ /T /C /E /G """ & FormatAccount(strAccount) & """:F"
-      Call SetFilePerm(strCmd)
+      Call RunCacls(strCmd)
   End Select
+
+End Sub
+
+
+Sub RunCacls(strCmd)
+  Call DebugLog("RunCacls: " & strCmd)
+  Dim arrCmd
+  Dim intUBound, intIdx, intIdx2
+  Dim strNTService
+
+  arrCmd            = Split(strCmd)
+  intUBound         = UBound(arrCmd)
+  strNTService      = GetBuildfileValue("NTService")
+  For intIdx = 0 To intUBound
+    Select Case True
+      Case Instr(arrCmd(intIdx), """:") = 0 
+        ' Nothing
+      Case Instr(arrCmd(intIdx), strNTService & "\") > 0 
+        arrCmd(intIdx) = ""
+      Case Else
+        For intIdx2 = intIdx + 1 To intUBound
+          Select Case True
+            Case Instr(arrCmd(intIdx2), """:") = 0
+              ' Nothing
+            Case StrComp(Left(arrCmd(intIdx), Instr(arrCmd(intIdx), """:")), Left(arrCmd(intIdx2), Instr(arrCmd(intIdx2), """:")), vbTextCompare) = 0
+              arrCmd(intIdx) = ""
+          End Select
+        Next      
+    End Select
+  Next  
+  strCmd            = Join(arrCmd, " ")
+
+  intIdx2           = 0
+  For intIdx = 0 To intUBound
+    Select Case True
+      Case Instr(arrCmd(intIdx), """:") = 0 
+        ' Nothing
+      Case Else
+        intIdx2     = 1
+    End Select
+  Next
+  If intIdx2 = 0 Then
+    Exit Sub
+  End If
+
+  Call Util_RunExec(GetBuildfileValue("ProgCacls") & " " & strCmd, "", strResponseYes, -1)
+  Select Case True
+    Case intErrSave = 0
+      ' Nothing
+    Case intErrSave = 2
+      ' Nothing
+    Case intErrSave = 13
+      ' Nothing
+    Case intErrSave = 1332   ' Problem with security descriptor
+      ' Nothing
+    Case Else
+      Call SetBuildMessage(strMsgError, "Error " & Cstr(intErrSave) & " " & strErrSave & " returned by " & strCmd)
+  End Select
+  Wscript.Sleep GetBuildfileValue("WaitShort") ' Allow time for CACLS processing to complete
 
 End Sub
 
@@ -461,20 +519,16 @@ Sub SetCertAuth(strCertThumb, strAccount)
   Dim strPKFile
 
   strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -match '" & strCertThumb & "'}).privatekey.cspkeycontainerinfo.uniquekeycontainername"
-  strPKFile         = GetPSOutput(strCmd)
-  Call DebugLog("PK File>" & strPKFile & "<")
+  strPKFile         = GetPSData(strCmd)
 
   strPath           = "C:\ProgramData\Microsoft\Crypto\RSA\MachineKeys\" & strPKFile
   Select Case True
     Case strPKFile = ""
-      Call SetBuildMessage(strMsgErrorWarn, "PK file for " &  strSSLCert & " not found")
+      Call SetBuildMessage(strMsgWarning, "PK file for " &  strSSLCert & " not found")
     Case Not objFSO.FileExists(strPath)
-      Call SetBuildMessage(strMsgErrorWarn, "PK file at """ &  strPath & """ not found")
+      Call SetBuildMessage(strMsgWarning, "PK file at """ &  strPath & """ not found")
     Case Else
-      strCmd        = "POWERSHELL $PkFile='" & strPath & "';"
-      strCmd        = strCmd & "$AclRule=New-Object Security.AccessControl.FileSystemAccessRule " & strAccount & ", read, allow;"
-      strCmd        = strCmd & "{$acl=Get-Acl -path $PkPath;$acl.AddAccessRule(AclRule);Set-Acl $PkPath $acl}"
-      Call Util_RunExec(strCmd, "", "", 0)
+      Call SetFilePerm(strPath, FormatAccount(strAccount), "Read", "Allow")
   End Select
 
 End Sub
@@ -520,74 +574,15 @@ Sub SetDCOMSecurity(strAppId)
 End Sub
 
 
-Sub SetFilePerm(strFolderPerm)
-  Call DebugLog("SetFilePerm: " & strFolderPerm)
-  Dim arrFolderPerm
-  Dim intUBound, intIdx, intIdx2
-  Dim strNTService, strShareDrive
+Sub SetFilePerm(strPath, strAccount, strAccess, strType)
+  Call DebugLog("SetFilePerm: " & strPath)
 
-  arrFolderPerm     = Split(strFolderPerm)
-  intUBound         = UBound(arrFolderPerm)
-  strNTService      = GetBuildfileValue("NTService")
-  For intIdx = 0 To intUBound
-    Select Case True
-      Case Instr(arrFolderPerm(intIdx), """:") = 0 
-        ' Nothing
-      Case Instr(arrFolderPerm(intIdx), strNTService & "\") > 0 
-        arrFolderPerm(intIdx) = ""
-      Case Else
-        For intIdx2 = intIdx + 1 To intUBound
-          Select Case True
-            Case Instr(arrFolderPerm(intIdx2), """:") = 0
-              ' Nothing
-            Case StrComp(Left(arrFolderPerm(intIdx), Instr(arrFolderPerm(intIdx), """:")), Left(arrFolderPerm(intIdx2), Instr(arrFolderPerm(intIdx2), """:")), vbTextCompare) = 0
-              arrFolderPerm(intIdx) = ""
-          End Select
-        Next      
-    End Select
-  Next  
-  strFolderPerm            = Join(arrFolderPerm, " ")
+  strCmd            = "POWERSHELL $PkFile='" & strPath & "';"
+  strCmd            = strCmd & "$AclRule=New-Object Security.AccessControl.FileSystemAccessRule " & strAccount & "," &  strAccess & ",,," & strType & ";"
+  strCmd            = strCmd & "$acl=Get-Acl -path $PkFile;$acl.AddAccessRule($AclRule);Set-Acl $PkFile $acl"
+  Call Util_RunExec(strCmd, "", "", 0)
 
-  intIdx2           = 0
-  For intIdx = 0 To intUBound
-    Select Case True
-      Case Instr(arrFolderPerm(intIdx), """:") = 0 
-        ' Nothing
-      Case Else
-        intIdx2     = 1
-    End Select
-  Next
-  If intIdx2 = 0 Then
-    Exit Sub
-  End If
-
-  strShareDrive     = ""
-  If Instr(strFolderPerm, "\\") > 0 Then
-    strShareDrive   = GetShareDrive(strFolderPerm)
-  End If
-
-  Call Util_RunExec(strProgCacls & " " & strFolderPerm, "", strResponseYes, -1)
-  Select Case True
-    Case intErrSave = 0
-      ' Nothing
-    Case intErrSave = 2
-      ' Nothing
-    Case intErrSave = 13
-      ' Nothing
-    Case intErrSave = 67     ' Network Name not found
-      ' Nothing
-    Case intErrSave = 1240   ' Not Authorized - Cannot put permission on remote share root
-      ' Nothing
-    Case intErrSave = 1332   ' Problem with security descriptor
-      ' Nothing
-    Case Else
-      Call SetBuildMessage(strMsgError, "Error " & Cstr(intErrSave) & " " & strErrSave & " returned by " & strFolderPerm)
-  End Select
-  Wscript.Sleep strWaitShort ' Allow time for CACLS processing to complete
-
-  If strShareDrive <> "" Then
-    Call Util_RunExec("NET USE " & strShareDrive & " /DELETE", "EOF", "", -1)
-  End If
+  Wscript.Sleep strWaitShort ' Allow time for processing to complete
 
 End Sub
 
@@ -849,6 +844,20 @@ Sub SetRegPerm(strRegParm, strName, strAccess)
 End Sub
 
 
+Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
+  Call DebugLog("SetSQLDBSSL: " & strSQLDBPath & " for " & strSQLDBAccount)
+
+  Call SetCertAuth(strSSLCertThumb, strSQLDBAccount)
+
+  strPath           = strSQLDBPath
+  strPath           = Mid(strPath, Instr(strPath, "\Microsoft SQL Server\") + 22, Len(strPath))
+  strPath           = Left(strPath, Instr(strPath, "\") - 1) 
+  strPath           = strHKLMSQL & strPath & "\MSSQLServer\SuperSocketNetLib\"
+  Call Util_RegWrite(strPath & "Certificate", strSSLCertThumb, "REG_SZ")
+
+End Sub
+
+
 End Class
 
 
@@ -889,7 +898,7 @@ Sub ResetFilePerm(strFolder, strAccount)
 End Sub
 
 Sub RunCacls(strFolderPerm)
-  Call FBManageSecurity.SetFilePerm(strFolderPerm)
+  Call FBManageSecurity.RunCacls(strFolderPerm)
 End Sub
 
 Sub SetCertAuth(strCertThumb, strAccount)
@@ -900,8 +909,8 @@ Sub SetDCOMSecurity(strAppId)
   Call FBManageSecurity.SetDCOMSecurity(strAppId)
 End Sub
 
-Sub SetFilePerm(strFolderPerm)
-  Call FBManageSecurity.SetFilePerm(strFolderPerm)
+Sub SetFilePerm(strPath, strAccount, strAccess, strType)
+  Call FBManageSecurity.SetFilePerm(strPath, strAccount, strAccess, strType)
 End Sub
 
 Sub SetFWRule(strFWName, strFWPort, strFWType, strFWDir, strFWProgram, strFWDesc, strFWEnable)
@@ -910,4 +919,8 @@ End Sub
 
 Sub SetRegPerm(strRegParm, strName, strAccess)
   Call FBManageSecurity.SetRegPerm(strRegParm, strName, strAccess)
+End Sub
+
+Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
+  Call FBManageSecurity.SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
 End Sub

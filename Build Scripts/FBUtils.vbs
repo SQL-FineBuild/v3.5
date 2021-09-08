@@ -220,12 +220,15 @@ Function GetCmdSQL()
 End Function
 
 
-Function GetPSOutput(strCmd)
-  Call DebugLog("GetPSOutput: " & strCmd)
+Function GetPSData(strCmd)
+  Call DebugLog("GetPSData: " & strCmd)
+  Dim strPSData
 
   Set objExec       = objShell.Exec("POWERSHELL " & strCmd)
   objExec.StdIn.Close
-  GetPSOutput       = objExec.StdOut.ReadAll
+  strPSData         = objExec.StdOut.ReadAll
+  strPSData         = Left(strPSData, Len(strPSData) - 2) & Replace(Replace(Right(strPSData, 2), Chr(10), ""), Chr(13), "")
+  GetPSData         = strPSData
 
 End Function
 
@@ -631,8 +634,8 @@ Function FormatServer(strServer, strProtocol)
   FormatServer      = FBUtils.FormatServer(strServer, strProtocol)
 End Function
 
-Function GetPSOutput(strCmd)
-  GetPSOutput       = FBUtils.GetPSOutput(strCmd)
+Function GetPSData(strCmd)
+  GetPSData       = FBUtils.GetPSData(strCmd)
 End Function
 
 Function GetCmdSQL()

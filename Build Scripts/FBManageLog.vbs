@@ -365,8 +365,10 @@ Sub ProcessEnd(strStatus)
     Case strStopAt = ""
       ' Nothing
     Case strStopAt = "AUTO"
+      Call SetBuildfileValue("StopAtForced", "Y")
       err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
     Case strStopAt <= strProcessIdLabel
+      Call SetBuildfileValue("StopAtForced", "Y")
       err.Raise 4, "", "Stop forced at: " & strProcessIdDesc
   End Select
 
