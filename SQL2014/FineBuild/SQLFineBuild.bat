@@ -1,6 +1,6 @@
 @ECHO OFF
 REM SQL FineBuild   
-REM Copyright FineBuild Team © 2008 - 2020.  Distributed under Ms-Pl License
+REM Copyright FineBuild Team © 2008 - 2021.  Distributed under Ms-Pl License
 REM
 REM Created 30 Jun 2008 by Ed Vassie V1.0 
 
@@ -10,6 +10,16 @@ IF '%SQLDEBUG~0,1%' NEQ '/' SET SQLDEBUG=
 IF '%SQLFBDEBUG%' == '' SET SQLFBDEBUG=REM
 SET SQLFBCMD=%~f0
 SET SQLFBPARM=%*
+SET SQLFBPARM=%SQLFBPARM:           /= /%
+SET SQLFBPARM=%SQLFBPARM:          /= /%
+SET SQLFBPARM=%SQLFBPARM:         /= /%
+SET SQLFBPARM=%SQLFBPARM:        /= /%
+SET SQLFBPARM=%SQLFBPARM:       /= /%
+SET SQLFBPARM=%SQLFBPARM:      /= /%
+SET SQLFBPARM=%SQLFBPARM:     /= /%
+SET SQLFBPARM=%SQLFBPARM:    /= /%
+SET SQLFBPARM=%SQLFBPARM:   /= /%
+SET SQLFBPARM=%SQLFBPARM:  /= /%
 SET SQLFBFOLDER=%~dp0
 FOR /F "usebackq tokens=*" %%X IN (`CHDIR`) DO (SET SQLFBSTART=%%X)
 SET SQLLOGTXT=
@@ -20,8 +30,6 @@ SET SQLUSERVBS=
 IF '%SQLVERSION%' == '' SET SQLVERSION=SQL2014
 CALL "%SQLFBFOLDER%\Build Scripts\Set-FBVersion"
 %WINDIR%\SYSTEM32\REGSVR32 /s VBSCRIPT.DLL
-
-PUSHD "%SQLFBFOLDER%"
 
 %SQLFBDEBUG% %TIME:~0,8% Validate Parameters
 
@@ -49,13 +57,6 @@ IF %SQLRC% == 1 SET SQLRC=0
 IF %SQLRC% NEQ 0 ECHO Process LogFile var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 
-%SQLFBDEBUG% %TIME:~0,8% ConfigVar:  FBParm (Refresh %SQLFBPARM)
-FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:FBParm %SQLFBPARM%`) DO (SET SQLFBPARM=%%X)
-SET SQLRC=%ERRORLEVEL%
-IF %SQLRC% == 1 SET SQLRC=0
-IF %SQLRC% NEQ 0 ECHO Process FBParm var failed
-IF %SQLRC% NEQ 0 GOTO :ERROR
-
 %SQLFBDEBUG% %TIME:~0,8% ConfigVar:  Debug (Check Debugging requirements)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:Debug %SQLFBPARM%`) DO (SET SQLDEBUG=%%X)
 SET SQLRC=%ERRORLEVEL%
@@ -63,6 +64,20 @@ IF %SQLRC% == 1 SET SQLRC=0
 IF %SQLRC% NEQ 0 ECHO Process Debug var failed
 IF %SQLRC% NEQ 0 GOTO :ERROR
 IF '%SQLDEBUG%' NEQ '' SET SQLFBDEBUG=ECHO
+
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar:  FBParm (Refresh %SQLFBPARM)
+FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:FBParm %SQLFBPARM%`) DO (SET SQLFBPARM=%%X)
+SET SQLRC=%ERRORLEVEL%
+IF %SQLRC% == 1 SET SQLRC=0
+IF %SQLRC% NEQ 0 ECHO Process FBParm var failed
+IF %SQLRC% NEQ 0 GOTO :ERROR
+
+%SQLFBDEBUG% %TIME:~0,8% ConfigVar:  FBParm (Minify %SQLFBPARM)
+FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:MiniParm %SQLFBPARM%`) DO (SET SQLFBPARM=%%X)
+SET SQLRC=%ERRORLEVEL%
+IF %SQLRC% == 1 SET SQLRC=0
+IF %SQLRC% NEQ 0 ECHO Process MiniParm var failed
+IF %SQLRC% NEQ 0 GOTO :ERROR
 
 %SQLFBDEBUG% %TIME:~0,8% ConfigVar:  ProcessId (Refresh %SQLPROCESSID)
 FOR /F "usebackq tokens=*" %%X IN (`CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:ProcessId %SQLFBPARM% %SQLDEBUG%`) DO (SET SQLPROCESSID=%%X)
@@ -232,7 +247,6 @@ CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigReport.vbs" %SQLDEBUG%
 
 %SQLFBDEBUG% %TIME:~0,8% ConfigVar:  ReportView (Display FineBuild Configuration Report)
 CSCRIPT //nologo "%SQLFBFOLDER%\Build Scripts\FBConfigVar.vbs" /VarName:ReportView
-POPD
 
 ECHO.
 ECHO ************************************************************
