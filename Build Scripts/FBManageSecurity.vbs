@@ -514,7 +514,7 @@ End Sub
 
 
 Sub SetCertAuth(strCertThumb, strAccount)
-  Call DebugLog("SetCertAuth: " & strCertThumb & strAccount)
+  Call DebugLog("SetCertAuth: " & strAccount)
   ' Code based on https://stackoverflow.com/questions/40046916/how-to-grant-permission-to-user-on-certificate-private-key-using-powershell
   Dim strPKFile
 
@@ -578,7 +578,7 @@ Sub SetFilePerm(strPath, strAccount, strAccess, strType)
   Call DebugLog("SetFilePerm: " & strPath)
 
   strCmd            = "POWERSHELL $PkFile='" & strPath & "';"
-  strCmd            = strCmd & "$AclRule=New-Object Security.AccessControl.FileSystemAccessRule " & strAccount & "," &  strAccess & ",,," & strType & ";"
+  strCmd            = strCmd & "$AclRule=New-Object Security.AccessControl.FileSystemAccessRule " & strAccount & "," &  strAccess & "," & strType & ";"
   strCmd            = strCmd & "$acl=Get-Acl -path $PkFile;$acl.AddAccessRule($AclRule);Set-Acl $PkFile $acl"
   Call Util_RunExec(strCmd, "", "", 0)
 
@@ -846,7 +846,9 @@ End Sub
 
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
   Call DebugLog("SetSQLDBSSL: " & strSQLDBPath & " for " & strSQLDBAccount)
+  Dim strSSLCertThumb
 
+  strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
   Call SetCertAuth(strSSLCertThumb, strSQLDBAccount)
 
   strPath           = strSQLDBPath

@@ -28,7 +28,7 @@ Dim intIdx
 Dim strCmd, strCmdPS, strCmdSQL
 Dim strOSVersion
 Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools
-Dim strServer, strServInst, strSQLVersion, strSQLVersionNum, strWaitShort
+Dim strServer, strServInst, strType, strSQLVersion, strSQLVersionNum, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -51,6 +51,7 @@ Private Sub Class_Initialize
     strProgCacls      = GetBuildfileValue("ProgCacls")
     strServer         = GetBuildfileValue("AuditServer")
     strServInst       = GetBuildfileValue("ServInst")
+    strType           = GetBuildfileValue("Type")
     strResponseNo     = GetBuildfileValue("ResponseNo")
     strResponseYes    = GetBuildfileValue("ResponseYes")
     strWaitShort      = GetBuildfileValue("WaitShort")
@@ -320,6 +321,8 @@ Sub SetParam(strParamName, strParam, strNewValue, strMessage, ByRef strList)
     Case strParam = ""
       strParam      = strNewValue
     Case strBuildValue = strNewValue
+      strParam      = strNewValue
+    Case Left(strType, 7) = "REFRESH"
       strParam      = strNewValue
     Case strMessage <> ""
       strParam      = strNewValue
