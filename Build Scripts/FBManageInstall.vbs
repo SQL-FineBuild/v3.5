@@ -59,7 +59,7 @@ Dim strPathInst
 
 Class FBManageInstallClass
 Dim objFile, objFolder, objFSO, strLogXtra, objShell, objWMIReg
-Dim strPathAddComp, strStatusFile, strStatusVar, strWaitShort
+Dim strPathAddComp, strPathTemp, strStatusFile, strStatusVar, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -70,6 +70,7 @@ Private Sub Class_Initialize
   Set objWMIReg     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\default:StdRegProv")
 
   strPathAddComp    = GetBuildfileValue("PathAddComp")
+  strPathTemp       = GetBuildfileValue("PathTemp")
   strPathInst       = ""
   strWaitShort      = GetBuildfileValue("WaitShort")
 
@@ -261,7 +262,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
   Call DebugLog("RunInstall_Setup:")
   Dim objApp, objItem, objTarget
   Dim intItems
-  Dim strCmd, strInstOption, strInstType, strNewFile, strNewPath, strParmExtract, strPathMain, strPathAlt, strPathTemp, strZipPath
+  Dim strCmd, strInstOption, strInstType, strNewFile, strNewPath, strParmExtract, strPathMain, strPathAlt, strZipPath
   Dim strSetupOption, strStatusSetup
 
   RunInstall_Setup  = False
@@ -271,7 +272,6 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
   strInstOption     = UCase(GetXMLParm(objInstParm, "InstOption",  "Install"))
   strInstType       = UCase(Right(strInstFile, 4))
   strPathAlt        = GetXMLParm(objInstParm, "PathAlt", "")
-  strPathTemp       = GetBuildfileValue("PathTemp")
   strSetupOption    = UCase(GetXMLParm(objInstParm, "SetupOption", ""))
 
   Select Case True
@@ -312,6 +312,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
         Case Else
           strNewPath = strNewPath & strZipPath
       End Select
+      WScript.Sleep strWaitShort
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
       Select Case True
@@ -327,6 +328,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       strDebugMsg2  = "Target: " & strNewPath
       strCmd        = "EXPAND """ & strPathInst & """ -F:* """ & strNewPath & """"
       Call Util_RunExec(strCmd, "", "", 0)
+      WScript.Sleep strWaitShort
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
       Select Case True
@@ -357,6 +359,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       End If
       strCmd        = """" & strPathInst & """ " & strParmExtract & """" & strNewPath & """"
       Call Util_RunExec(strCmd, "", "", 0)
+      Wscript.Sleep strWaitShort
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
       Select Case True
@@ -373,6 +376,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       strNewFile    = Right(strPathInst, Len(strPathInst) - InstrRev(strPathInst, "\"))
       Set objFile   = objFSO.GetFile(strPathInst)
       objFile.Copy strNewPath & "\" & strNewFile, True
+      WScript.Sleep strWaitShort
       If GetPathInst(strNewFile, strNewPath, "") = "" Then
         Exit Function
       End If
@@ -386,41 +390,19 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
 End Function
 
 
-Private Sub CreateSetupFolder(strPath, strReset)
-  Call DebugLog("CreateSetupFolder: " & strPath)
-  Dim strPathFull, strPathPrev, strPathTemp
-
-  strPathTemp       = GetBuildfileValue("PathTemp")
-
-  strPathFull       = strPath
-  If Right(strPathFull, 1) = "\" Then
-    strPathFull     = Left(strPathFull, Len(strPathFull) - 1)
-  End If
+Private Sub CreateSetupFolder(strFolder, strReset)
+  Call DebugLog("CreateSetupFolder: " & strFolder)
 
   Select Case True
     Case strReset <> "Y"
       ' Nothing
-    Case Left(strPath, Len(strPath)) <> strPathTemp
+    Case Left(strFolder, Len(strFolder)) <> strPathTemp
       ' Nothing
-    Case objFSO.FolderExists(strPathFull) 
-      objFSO.DeleteFolder strPathFull, 1 
-      Wscript.Sleep strWaitShort ' Wait for NTFS Cache to catch up
+    Case Else 
+      Call DeleteFolder(strFolder)
   End Select
 
-  strPathPrev       = Left(strPathFull, InstrRev(strPathFull, "\") - 1)
-  strDebugMsg1      = "PathPrev: " & strPathPrev
-  Select Case True
-    Case objFSO.FolderExists(strPathFull)
-      ' Nothing
-    Case objFSO.FolderExists(strPathPrev)
-      objFSO.CreateFolder(strPathFull)
-      Wscript.Sleep strWaitShort
-    Case Else
-      Call CreateSetupFolder(strPathPrev, "N")
-      Wscript.Sleep strWaitShort
-      objFSO.CreateFolder(strPathFull)
-      Wscript.Sleep strWaitShort
-  End Select
+  Call SetupFolder(strFolder)
 
 End Sub
 
@@ -429,7 +411,7 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   Call DebugLog("RunInstall_Process:")
   Dim strCmd, strCompatFlags, strHKCU, strInstFile, strInstOption, strInstPrompt, strInstType
   Dim strMode, strMSILayer, strMSIAutoOS, strOSType, strOSVersion
-  Dim strLogClean, strParmLog, strParmMonitor, strParmRetry, strPath, strPathCmd, strPathLog, strPathTemp, strTempClean
+  Dim strLogClean, strParmLog, strParmMonitor, strParmRetry, strPath, strPathCmd, strPathLog, strTempClean
 
   RunInstall_Process = False
   strInstOption     = UCase(GetXMLParm(objInstParm, "InstOption", "Install"))
@@ -444,7 +426,6 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   strOSType         = GetBuildfileValue("OSType")
   strOSVersion      = GetBuildfileValue("OSVersion")
   strPathLog        = GetXMLParm(objInstParm, "PathLog",   GetPathLog(strLogXtra))
-  strPathTemp       = GetBuildfileValue("PathTemp")
   strParmMonitor    = GetXMLParm(objInstParm, "ParmMonitor", "")
   strParmRetry      = GetXMLParm(objInstParm, "ParmRetry", "0")
 
@@ -609,13 +590,8 @@ Private Function RunInstall_Process(strInstName, objInstParm)
       ' Nothing
     Case Left(strPathInst, Len(strPathTemp)) <> strPathTemp
       ' Nothing
-    Case Left(strPathInst, InstrRev(strPathInst, "\") - 1) = strPathTemp
-      ' Nothing
     Case Else
-      strPath       = Left(strPathInst, InstrRev(strPathInst, "\") - 1)
-      strDebugMsg1  = "Deleting: " & strPath
-      Set objFolder = objFSO.GetFolder(strPath)
-      objFolder.Delete(1)
+      Call DeleteFolder(strPathInst)
       If strMSILayer <> "" Then                
         objWMIReg.DeleteValue strHKCU, Mid(strMSILayer, 6), strPathInst
       End If

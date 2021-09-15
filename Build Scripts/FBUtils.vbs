@@ -27,7 +27,7 @@ Dim colPrcEnvVars
 Dim intIdx
 Dim strCmd, strCmdPS, strCmdSQL
 Dim strOSVersion
-Dim strPath, strPathCmdSQL, strPathTools, strProgCacls, strRegTools
+Dim strPath, strPathCmdSQL, strPathTemp, strPathTools, strProgCacls, strRegTools
 Dim strServer, strServInst, strType, strSQLVersion, strSQLVersionNum, strWaitShort
 
 
@@ -48,6 +48,7 @@ Private Sub Class_Initialize
     strCmdPS          = GetBuildfileValue("CmdPS")
     strCmdSQL         = GetBuildfileValue("CmdSQL")
     strOSVersion      = GetBuildfileValue("OSVersion")
+    strPathTemp       = GetBuildfileValue("PathTemp")
     strProgCacls      = GetBuildfileValue("ProgCacls")
     strServer         = GetBuildfileValue("AuditServer")
     strServInst       = GetBuildfileValue("ServInst")
@@ -80,6 +81,32 @@ Sub DeleteFile(strFile)
     Call objFSO.DeleteFile(strFile, True)
     Wscript.Sleep strWaitShort
   End If
+
+End Sub
+
+
+Sub DeleteFolder(strFolder)
+  Call DebugLog("DeleteFolder: " & strFolder)
+  Dim strPath
+
+  Select Case True
+    Case strFolder = ""
+      Exit Sub
+    Case Right(strFolder, 1) = "\" 
+      strPath       = Left(strFolder, Len(strFolder) - 1)
+    Case Else
+      strPath       = strFolder
+  End Select
+
+  Select Case True
+    Case strPath = strPathTemp
+      ' Nothing
+    Case Not objFSO.FolderExists(strPath)
+      ' Nothing
+    Case Else
+      objFSO.DeleteFolder strPath, 1
+      Wscript.Sleep strWaitShort
+  End Select
 
 End Sub
 
@@ -623,6 +650,10 @@ End Sub
 
 Sub DeleteFile(strFile)
   Call FBUtils.DeleteFile(strFile)
+End Sub
+
+Sub DeleteFolder(strFolder)
+  Call FBUtils.DeleteFolder(strFolder)
 End Sub
 
 Function FormatFolder(strFolder)
