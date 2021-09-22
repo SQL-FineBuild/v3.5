@@ -45,17 +45,17 @@ Private Sub Class_Initialize
   strErrSave        = ""
 
   If strProcessIdCode <> "FBCV" Then
-    strCmdPS          = GetBuildfileValue("CmdPS")
-    strCmdSQL         = GetBuildfileValue("CmdSQL")
-    strOSVersion      = GetBuildfileValue("OSVersion")
-    strPathTemp       = GetBuildfileValue("PathTemp")
-    strProgCacls      = GetBuildfileValue("ProgCacls")
-    strServer         = GetBuildfileValue("AuditServer")
-    strServInst       = GetBuildfileValue("ServInst")
-    strType           = GetBuildfileValue("Type")
-    strResponseNo     = GetBuildfileValue("ResponseNo")
-    strResponseYes    = GetBuildfileValue("ResponseYes")
-    strWaitShort      = GetBuildfileValue("WaitShort")
+    strCmdPS        = GetBuildfileValue("CmdPS")
+    strCmdSQL       = GetBuildfileValue("CmdSQL")
+    strOSVersion    = GetBuildfileValue("OSVersion")
+    strPathTemp     = GetBuildfileValue("PathTemp")
+    strProgCacls    = GetBuildfileValue("ProgCacls")
+    strServer       = GetBuildfileValue("AuditServer")
+    strServInst     = GetBuildfileValue("ServInst")
+    strType         = GetBuildfileValue("Type")
+    strResponseNo   = GetBuildfileValue("ResponseNo")
+    strResponseYes  = GetBuildfileValue("ResponseYes")
+    strWaitShort    = GetBuildfileValue("WaitShort")
     Call SetHKLMSQL()
   End If
 
@@ -64,11 +64,21 @@ End Sub
 
 Sub CopyFile(strSource, strTarget)
   Call DebugLog("CopyFile: " & strSource & " to " & strTarget)
+  Dim strTgtFolder
 
-  Set objFile       = objFSO.GetFile(strSource)
-  strPath           = strTarget & objFile.Name
-  If Not objFSO.FileExists(strPath) Then
-    objFile.Copy strPath, True
+  Select Case True
+    Case Right(strTarget, 1) = "\"
+      strTgtFolder  = strTarget
+    Case Else
+      strTgtFolder  = strTarget & "\"
+  End Select
+
+  If objFSO.FileExists(strSource) Then
+    Set objFile     = objFSO.GetFile(strSource)
+    strPath         = strTgtFolder & objFile.Name
+    If Not objFSO.FileExists(strPath) Then
+      objFile.Copy strPath, True
+    End If
   End If
 
 End Sub
@@ -286,18 +296,35 @@ Function GetSQLData(strCmd, strCmdItem)
 End Function
 
 
-Sub SetupFolder(strFolder)
-  Call DebugLog("SetupFolder: " & strFolder)
-  Dim strPath, strPathParent
+Sub SetupFolder(objParm)
+  Call DebugLog("SetupFolder: " & CStr(objParm))
+  Dim objParmParent
+  Dim strPath, strPathParent, strSecurity, strShare
 
   Select Case True
-    Case strFolder = ""
-      Exit Sub
-    Case Right(strFolder, 1) = "\" 
-      strPath       = Left(strFolder, Len(strFolder) - 1)
+    Case IsObject(objParm) = 0
+      strPath       = objParm
+      strSecurity   = ""
     Case Else
-      strPath       = strFolder
+      strPath       = GetXMLParm(objParm, "Folder",    "")
+      strSecurity   = GetXMLParm(objParm, "Security",  "")
   End Select
+
+  Select Case True
+    Case strPath = ""
+      Exit Sub
+    Case Right(strPath, 1) = "\" 
+      strPath       = Left(strPath, Len(strPath) - 1)
+  End Select
+  Select Case True
+    Case Left(strPath, 2) <> "\\"
+      ' Nothing
+    Case Instr(3, strPath, "\") = 0
+      strShare      = strPath
+    Case Else
+      strShare      = Left(strPath, Instr(3, strPath, "\") - 1)
+  End Select
+
   strPathParent     = Left(strPath, InstrRev(strPath, "\") - 1)
   strDebugMsg1      = "PathParent: " & strPathParent
 
@@ -305,8 +332,9 @@ Sub SetupFolder(strFolder)
     Case objFSO.FolderExists(strPath)
       ' Nothing
     Case Not objFSO.FolderExists(strPathParent)
-      Call SetupFolder(strPathParent)
-      Wscript.Sleep GetBuildfileValue("WaitMed")
+      Call SetXMLParm(objParmParent, "Folder",   strPathParent)
+      Call SetXMLParm(objParmParent, "Security", strSecurity)
+      Call SetupFolder(objParmParent)
       objFSO.CreateFolder(strPath)
       Wscript.Sleep strWaitShort
     Case Else
@@ -319,11 +347,12 @@ End Sub
 
 Private Sub SetHKLMSQL()
 
-  strHKLMSQL        = "HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\"
-
-  If GetBuildfileValue("WOWX86") = "TRUE" Then
-    strHKLMSQL      = "HKLM\SOFTWARE\Wow6432Node\Microsoft\Microsoft SQL Server\"
-  End If
+  Select Case True
+    Case GetBuildfileValue("WOWX86") = "TRUE"
+      strHKLMSQL    = "HKLM\SOFTWARE\Wow6432Node\Microsoft\Microsoft SQL Server\"
+    Case Else
+      strHKLMSQL    = "HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\"
+  End Select
 
   Call SetBuildfileValue("HKLMSQL", strHKLMSQL)
 

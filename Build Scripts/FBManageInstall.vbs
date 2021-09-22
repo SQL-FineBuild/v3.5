@@ -396,7 +396,7 @@ Private Sub CreateSetupFolder(strFolder, strReset)
   Select Case True
     Case strReset <> "Y"
       ' Nothing
-    Case Left(strFolder, Len(strFolder)) <> strPathTemp
+    Case Left(strFolder, Len(strPathTemp)) <> strPathTemp
       ' Nothing
     Case Else 
       Call DeleteFolder(strFolder)

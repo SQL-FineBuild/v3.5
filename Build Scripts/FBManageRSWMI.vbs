@@ -67,6 +67,8 @@ End Sub
 
 Function RunRSWMI(strFunction, strOK)
   Call DebugLog("RunRSWMI: " & strFunction)
+' MSReportManager_ConfigurationSetting: https://docs.microsoft.com/en-us/previous-versions/sql/sql-server-2005/ms154684(v=sql.90)
+' MSReportServer_ConfigurationSetting:  https://docs.microsoft.com/en-us/previous-versions/sql/sql-server-2005/ms154648(v=sql.90)
   Dim intErrSave
 
   strWMIPath        = strRSNamespace & ".InstanceName='" & strInstRSSQL & "'"
@@ -135,16 +137,13 @@ Sub SetRSDirectory(strApplication, strDirectory)
   strStoreNamespace = strRSNamespace
 
   Select Case True
-    Case strSQLVersion <= "SQL2005"
-      If strApplication = "ReportManager" Then
-        strFunction = SetRSInParam("SetWebServiceIdentity")
-        objRSInParam.Properties_.Item("ApplicationPool")  = "DefaultAppPool"
-        Call RunRSWMI(strFunction, "")
-        strRSNamespace = "MSReportManager_ConfigurationSetting"
-      End If
-      strFunction   = SetRSInParam("CreateVirtualDirectory")
-    Case Else
+    Case strSQLVersion > "SQL2005"
       strFunction   = SetRSInParam("SetVirtualDirectory")
+    Case strApplication = "ReportManager"
+      strRSNamespace = "MSReportManager_ConfigurationSetting"
+      strFunction    = SetRSInParam("CreateVirtualDirectory")
+    Case Else
+      strFunction   = SetRSInParam("CreateVirtualDirectory")
   End Select
 
   Select Case True
@@ -163,10 +162,16 @@ Sub SetRSDirectory(strApplication, strDirectory)
   Call RunRSWMI(strFunction, "-2147220930 -2147220978 -2147220980 -2147024864") ' OK if Directory already exists
 
   Select Case True
-    Case strSQLVersion <= "SQL2005"
-      ' Nothing
-    Case Else
+    Case strSQLVersion > "SQL2005"
       Call SetRSURL(strApplication, strDirectory)
+    Case strApplication = "ReportManager"
+      strFunction   = SetRSInParam("SetReportManagerIdentity")
+      objRSInParam.Properties_.Item("ApplicationPool")  = "DefaultAppPool"
+      Call RunRSWMI(strFunction, "")
+    Case Else
+      strFunction   = SetRSInParam("SetWebServiceIdentity")
+      objRSInParam.Properties_.Item("ApplicationPool")  = "DefaultAppPool"
+      Call RunRSWMI(strFunction, "")
   End Select
 
   strRSNamespace    = strStoreNamespace
@@ -176,17 +181,9 @@ End Sub
 
 Private Sub SetRSURL(strApplication, strDirectory)
   Call DebugLog("SetRSURL: " & strApplication)
-  Dim strStoreNamespace, strURLVar
-
-  strStoreNamespace = strRSNamespace
+  Dim strURLVar
 
   Select Case True
-    Case strSQLVersion <= "SQL2005"
-      strRSNamespace = "MSReportManager_ConfigurationSetting"
-      strFunction    = SetRSInParam("SetReportServerURLs")
-      objRSInParam.Properties_.Item("ReportServerVirtualDirectory") = strDirectory
-      objRSInParam.Properties_.Item("ReportServerExternalURL")      = ""
-      strURLVar      = "ReportServerURL"
     Case strSetupPowerBI = "YES"
       strFunction    = SetRSInParam("ReserveURL")
       objRSInParam.Properties_.Item("Application")                  = strApplication
@@ -203,8 +200,6 @@ Private Sub SetRSURL(strApplication, strDirectory)
   If strRSNetName <> strServer Then
     Call SetRSURLItem(strFunction, objRSInParam, strURLVar, strRSNetName, strApplication)
   End If
-
-  strRSNamespace    = strStoreNamespace
 
 End Sub
 
