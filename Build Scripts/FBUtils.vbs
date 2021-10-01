@@ -297,7 +297,6 @@ End Function
 
 
 Sub SetupFolder(objParm)
-  Call DebugLog("SetupFolder: " & CStr(objParm))
   Dim objParmParent
   Dim strPath, strPathParent, strSecurity, strShare
 
@@ -309,6 +308,7 @@ Sub SetupFolder(objParm)
       strPath       = GetXMLParm(objParm, "Folder",    "")
       strSecurity   = GetXMLParm(objParm, "Security",  "")
   End Select
+  Call DebugLog("SetupFolder: " & strPath)
 
   Select Case True
     Case strPath = ""

@@ -195,13 +195,14 @@ Private Function RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
 
   For intIdx = 0 To UBound(arrVerPreCon)
     Select Case True
-      Case CLng(arrVerFile(intIdx)) < CLng(arrVerPreCon(intIdx))
-        Exit Function
-      Case intIdx > 0
-        ' Nothing
       Case CLng(arrVerFile(intIdx)) > CLng(arrVerPreCon(intIdx))
         Exit Function
+      Case CLng(arrVerFile(intIdx)) = CLng(arrVerPreCon(intIdx))
+        ' Nothing
+      Case Else
+        Exit For
     End Select
+    Exit Function
   Next
 
   RunInstall_PreCon_File = True
@@ -340,12 +341,8 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
     Case strInstType = ".PDF"
       strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
       Call CreateSetupFolder(strNewPath, "Y")
-      strDebugMsg1  = "Source: " & strPathInst
-      strDebugMsg2  = "Target: " & strNewPath
-      strNewFile    = Right(strPathInst, Len(strPathInst) - InstrRev(strPathInst, "\"))
-      Set objFile   = objFSO.GetFile(strPathInst)
-      objFile.Copy strNewPath & "\" & strNewFile, True
-      If GetPathInst(strNewFile, strNewPath, "") = "" Then
+      Call CopyFile(strPathInst, strNewPath)
+      If GetPathInst(strInstFile, strNewPath, "") = "" Then
         Exit Function
       End If
     Case strSetupOption = "EXTRACT" ' Extact contents from Install File before installing
@@ -370,14 +367,9 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       End Select
     Case strSetupOption = "COPY" ' Copy Install File to local folder before installing
       strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
-      Call CreateSetupFolder(strNewPath, "Y") 
-      strDebugMsg1  = "Source: " & strPathInst
-      strDebugMsg2  = "Target: " & strNewPath
-      strNewFile    = Right(strPathInst, Len(strPathInst) - InstrRev(strPathInst, "\"))
-      Set objFile   = objFSO.GetFile(strPathInst)
-      objFile.Copy strNewPath & "\" & strNewFile, True
-      WScript.Sleep strWaitShort
-      If GetPathInst(strNewFile, strNewPath, "") = "" Then
+      Call CreateSetupFolder(strNewPath, "Y")
+      Call CopyFile(strPathInst, strNewPath)
+      If GetPathInst(strInstFile, strNewPath, "") = "" Then
         Exit Function
       End If
       Call SetTrustedZone(strPathInst)
@@ -688,11 +680,7 @@ Private Sub RunInstall_Menu(strInstName, objInstParm)
       End If
     Case strMenuOption = "REMOVE"
       strPathOld    = GetXMLParm(objInstParm, "MenuPath",   "") & "\" & GetXMLParm(objInstParm, "MenuPath",   "") & ".lnk"
-      strDebugMsg1  = "Source: " & strPathOld
-      If objFSO.FileExists(strPathOld) Then
-        Set objFile     = objFSO.GetFile(strPathOld)
-        objFile.Delete(1)
-      End If
+      Call DeleteFile(strPathOld)
   End Select
 
 End Sub
