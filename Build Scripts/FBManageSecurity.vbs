@@ -240,13 +240,40 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
 End Function
 
 
-Function GetCertThumbprint(strCertName)
-  Call DebugLog("GetCertThumbprint: " & strCertName)
-  Dim strThumbprint
+Function GetCertAttr(strCertName, strCertAttr)
+  Call DebugLog("GetCertAttr: " & strCertName & ", " & strCertAttr)
+  Dim strAttrValue
 
-  strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.FriendlyName -match '" & strCertName & "'}).Thumbprint"
-  strThumbprint     = GetPSData(strCmd)
-  GetCertThumbprint = LCase(strThumbprint)
+  strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.FriendlyName -match '" & strCertName & "'})." & strCertAttr
+  strAttrValue      = GetPSData(strCmd)
+
+  Select Case True
+    Case IsNull(strAttrValue)
+      strAttrValue  = ""
+    Case UCase(strCertAttr) = "THUMBPRINT"
+      strAttrValue  = LCase(strAttrValue)
+  End Select
+
+  GetCertAttr       = strAttrValue
+
+End Function
+
+
+Function GetDomainAttr(strDomAttr)
+  Call DebugLog("GetDomainAttr: " & strDomAttr)
+  Dim strAttrValue, strUserDNSDomain
+  On Error Resume Next 
+
+  strAttrValue      = ""
+  strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
+  If strUserDNSDomain <> "" Then
+    objADOCmd.CommandText = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(objectClass=domain);name," & strDomAttr
+    Set objRecordSet      = objADOCmd.Execute
+    strAttrValue          = objRecordset.Fields(strDomAttr).Value
+  End If
+
+  GetDomainAttr     = strAttrValue
+  On Error Goto 0
 
 End Function
 
@@ -879,8 +906,12 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
   GetAccountAttr    = FBManageSecurity.GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
 End Function
 
-Function GetCertThumbprint(strCertName)
-  GetCertThumbprint = FBManageSecurity.GetCertThumbprint(strCertName)
+Function GetCertAttr(strCertName, strCertAttr)
+  GetCertAttr = FBManageSecurity.GetCertAttr(strCertName, strCertAttr)
+End Function
+
+Function GetDomainAttr(strDomAttr)
+  GetDomainAttr     =  FBManageSecurity.GetDomainAttr(strDomAttr)
 End Function
 
 Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
