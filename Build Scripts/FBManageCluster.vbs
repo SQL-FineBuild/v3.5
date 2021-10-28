@@ -939,6 +939,38 @@ Private Sub ClearResParent(strVolLabel)
 End Sub
 
 
+Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
+  Call DebugLog("SetClusNetworkProps: " & strClusterNetwork)
+  Dim colClusNodes
+  Dim objClusNode
+
+  Set colClusNodes  = GetClusterNodes()
+  For Each objClusNode In colClusNodes
+    Select Case True
+      Case strClusterAction = "ADDNODE" 
+        If UCase(strServer) = UCase(objClusNode.Name) Then
+          Call SetResourceOff(strClusterNetwork, "")
+          Call AddOwner(strClusterNetwork)
+        End If
+      Case UCase(strServer) = UCase(objClusNode.Name)
+        Call SetResourceOff(strClusterNetwork, "")
+        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PROP PendingTimeout=600000:DWORD "
+        Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireDNS=1:DWORD "
+        Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireKerberos=1:DWORD "
+        Call Util_RunExec(strCmd, "", strResponseYes, 0)
+      Case Else
+        Call SetResourceOff(strClusterNetwork, "")
+        Call RemoveOwner(strClusterNetwork, objClusNode.Name)
+    End Select
+  Next
+
+  Set colClusNodes  = Nothing
+
+End Sub
+
+
 Sub SetResourceOff(strResource, strResourceType)
   Call DebugLog("SetResourceOff: " & strResource)
   Dim strType
@@ -1100,6 +1132,10 @@ End Sub
 
 Sub SetOwnerNode(strCluster)
   Call FBManageCluster.SetOwnerNode(strCluster)
+End Sub
+
+Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
+  Call FBManageCluster.SetClusNetworkProps(strClusterNetwork, strClusterAction)
 End Sub
 
 Sub SetResourceOff(strResource, strResourceType)

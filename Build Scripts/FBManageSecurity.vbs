@@ -109,6 +109,40 @@ Private Function CheckGroup(strName, strUserDNSDomain)
 
 End Function
 
+
+Sub CheckKerberosStatus()
+  Call DebugLog("CheckKerberosStatus: " & strProcessId)
+
+  Call CheckServerMSAGroup(strServer)
+
+  Call CheckServerMSAGroup(strClusterName)
+
+End Sub
+
+
+Private Sub CheckServerMSAGroup(strServer)
+  Call DebugLog("CheckServerMSAGroup: " & strServer)
+  Dim strServerGroups
+
+  strServerGroups   = GetAccountAttr(strServer, strUserDnsDomain, "memberOf")
+  Select Case True
+    Case strGroupMSA = ""
+      ' Nothing
+    Case InStr(" " & strServerGroups & " ", strGroupMSA & " ") = 0
+      Call SetBuildfileValue("RebootStatus", "Pending")
+      strDebugMsg1  = "Server Groups: " & strServerGroups
+      strDebugMsg2  = "MSA Group    : " & strGroupMSA
+      Call SetBuildMessage(strMsgError, "You must process Kerberos Command File before SQL FineBuild can continue")
+    Case GetBuildfileValue("RebootStatus") <> "Pending"
+      ' Nothing
+    Case GetBuildfileValue(strServer & "MSAGroup") <> ""
+      Call SetupReboot(GetBuildfileValue("ProcessId"), "Prepare for " & GetBuildfileValue("ProcessIdDesc"))
+    Case Else
+      ' Nothing
+  End Select
+
+End Sub
+
 Function FormatAccount(strAccount)
   Call DebugLog("FormatAccount: " & strAccount)
   Dim strFmtAccount
@@ -548,7 +582,7 @@ Sub SetCertAuth(strCertThumb, strAccount)
   strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -match '" & strCertThumb & "'}).privatekey.cspkeycontainerinfo.uniquekeycontainername"
   strPKFile         = GetPSData(strCmd)
 
-  strPath           = "C:\ProgramData\Microsoft\Crypto\RSA\MachineKeys\" & strPKFile
+  strPath           = GetBuildfileValue("VolSys") & ":\ProgramData\Microsoft\Crypto\RSA\MachineKeys\" & strPKFile
   Select Case True
     Case strPKFile = ""
       Call SetBuildMessage(strMsgWarning, "PK file for " &  strSSLCert & " not found")
@@ -708,6 +742,13 @@ Private Sub SetAdvFirewall(strFWName, strFWPort, strFWType, strFWDir, strFWProgr
   Dim strRuleExist
 
   strRuleExist      = CheckFWName(strFWName)
+  Select Case True
+    Case strRuleExist = True
+      ' Nothing
+    Case Left(strFWName, 35) = "Distributed Transaction Coordinator"
+      strFWName     = Replace(strFWName, "Coordinator", "Co-ordinator")
+      strRuleExist  = CheckFWName(strFWName)
+  End Select
 
   If strRuleExist = False Then 
     strCmd          = "NETSH ADVFIREWALL FIREWALL ADD RULE NAME=""" & strFWName & """ "
@@ -892,6 +933,10 @@ End Class
 
 Sub BackupDBMasterKey(strDB, strPassword)
   Call FBManageSecurity.BackupDBMasterKey(strDB, strPassword)
+End Sub
+
+Sub CheckKerberosStatus()
+  Call FBManageSecurity.CheckKerberosStatus()
 End Sub
 
 Function FormatAccount(strAccount)

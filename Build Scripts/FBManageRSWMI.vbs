@@ -213,14 +213,19 @@ Private Sub SetRSURLItem(strFunction, objRSInParam, strURLVar, strHost, strAppli
       strURL         = "HTTP://" & UCase(strHost) & ":" & strTCPPortRS
     Case strSetupSSL = "YES"
       strURL         = "HTTPS://+:" & strTCPPortSSL
-      Call SetRSSSLBind(strApplication)
     Case Else
       strURL         = "HTTP://" & UCase(strHost) & ":" & strTCPPortRS
   End Select
-
   strDebugMsg1       = "URL: " & strURL
   objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL
   Call RunRSWMI(strFunction, "-2147220932") ' OK if URL already exists
+
+  Select Case True
+    Case strHost = strServer
+      ' Nothing
+    Case strSetupSSL = "YES"
+      Call SetRSSSLBind(strApplication)
+  End Select
 
 End Sub
 
