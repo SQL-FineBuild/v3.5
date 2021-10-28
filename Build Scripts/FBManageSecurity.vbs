@@ -21,8 +21,10 @@ Class FBManageSecurityClass
 Dim objADOCmd, objADOConn, objExec, objFolder, objFSO, objFW, objFWRules, objRecordSet, objSDUtil, objShell, objWMIReg
 Dim arrProfFolders, arrProfUsers
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
-Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup, strGroupDBA, strGroupDBANonSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
-Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg, strServer, strSIDDistComUsers, strSSLCert, strUser, strUserAccount, strWaitShort
+Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
+Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
+Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
+Dim strServer, strSIDDistComUsers, strSSLCert, strUser, strUserAccount, strUserDnsDomain, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -45,6 +47,7 @@ Private Sub Class_Initialize
   strDirSystemDataBackup = GetBuildfileValue("DirSystemDataBackup")
   strGroupDBA       = GetBuildfileValue("GroupDBA")
   strGroupDBANonSA  = GetBuildfileValue("GroupDBANonSA")
+  strGroupMSA       = GetBuildfileValue("GroupMSA")
   strIsInstallDBA   = GetBuildfileValue("IsInstallDBA")
   strLocalAdmin     = GetBuildfileValue("LocalAdmin")
   strNTAuth         = GetBuildfileValue("NTAuth")
@@ -56,6 +59,7 @@ Private Sub Class_Initialize
   strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
   strSSLCert        = GetBuildfileValue("SSLCert")
   strUserAccount    = GetBuildfileValue("UserAccount")
+  strUserDnsDomain  = GetBuildfileValue("UserDnsDomain")
   strWaitShort      = GetBuildfileValue("WaitShort")
 
   Set arrProfFolders  = objFSO.GetFolder(strProfDir).SubFolders
@@ -124,7 +128,7 @@ Private Sub CheckServerMSAGroup(strServer)
   Call DebugLog("CheckServerMSAGroup: " & strServer)
   Dim strServerGroups
 
-  strServerGroups   = GetAccountAttr(strServer, strUserDnsDomain, "memberOf")
+  strServerGroups   = GetAccountAttr(strServer, strUserDnsDomain, "MemberOf")
   Select Case True
     Case strGroupMSA = ""
       ' Nothing
@@ -219,7 +223,7 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
   End Select
 
   On Error Resume Next 
-  objADOCmd.CommandText          = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName," & strSearchAttr
+  objADOCmd.CommandText = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName," & strSearchAttr
   Set objRecordSet  = objADOCmd.Execute
 
   On Error Goto 0
@@ -912,6 +916,34 @@ Sub SetRegPerm(strRegParm, strName, strAccess)
 End Sub
 
 
+Sub SetIISSSL()
+  Call DebugLog("SetIISSSL:")
+  Dim objIIS, objSite, objSites
+
+  Select Case True
+    Case strOSVersion < "6.0"
+      Set objSites = GetObject("IIS://" & strServer & "/W3SVC" )
+    Case Else
+      Set objIIS   = GetObject("winmgmts:root\WebAdministration")
+      Set objSites = objIIS.InstancesOf("Site")
+  End Select
+
+  For Each objSite In objSites
+    Call DebugLog(objSite.Name)
+    Select Case True
+      Case strOSVersion < "6.0"
+        ' TBC
+      Case Else
+        strCmd        = "NETSH HTTP DELETE SSLCERT IPPORT=""0.0.0.0:443"" "
+        Call Util_RunExec(strCmd, "", "", -1)
+        strCmd        = "NETSH HTTP ADD SSLCERT IPPORT=""0.0.0.0:443"" CERTHASH=""" & strSSLCertThumb & """ CERTSTORE=""my"" APPID=""{4fb6d93c-0683-4d9a-8f98-d948bff0e666}"" " ' PowerBI Server AppId
+        Call Util_RunExec(strCmd, "", "", -1)
+    End Select
+  Next
+
+End Sub
+
+
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
   Call DebugLog("SetSQLDBSSL: " & strSQLDBPath & " for " & strSQLDBAccount)
   Dim strSSLCertThumb
@@ -997,6 +1029,10 @@ End Sub
 
 Sub SetRegPerm(strRegParm, strName, strAccess)
   Call FBManageSecurity.SetRegPerm(strRegParm, strName, strAccess)
+End Sub
+
+Sub SetIISSSL()
+  Call FBManageSecurity.SetIISSSL()
 End Sub
 
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)

@@ -23,7 +23,7 @@ Dim intRSLcid
 
 Class FBManageRSWMIClass
   Dim objRSConfig, objRSWMI, objShell
-  Dim strFunction, strHTTP, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSNetName, strRSWMIPath
+  Dim strFunction, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSNetName, strRSWMIPath
   Dim strServer, strSetupPowerBI, strSetupSSL, strSetupSQLRSCluster, strSSLCertThumb, strTCPPortRS, strTCPPortSSL, strSQLVersion, strWMIPath
 
 
@@ -33,7 +33,6 @@ Private Sub Class_Initialize
 
   Set objShell      = WScript.CreateObject ("Wscript.Shell")
 
-  strHTTP           = GetBuildfileValue("HTTP")
   strInstRS         = GetBuildfileValue("InstRS")
   strInstRSSQL      = GetBuildfileValue("InstRSSQL")
   strInstRSWMI      = GetBuildfileValue("InstRSWMI")
@@ -210,11 +209,11 @@ Private Sub SetRSURLItem(strFunction, objRSInParam, strURLVar, strHost, strAppli
 
   Select Case True
     Case strHost = strServer
-      strURL         = "HTTP://" & UCase(strHost) & ":" & strTCPPortRS
+      strURL         = "http://" & UCase(strHost) & ":" & strTCPPortRS
     Case strSetupSSL = "YES"
-      strURL         = "HTTPS://+:" & strTCPPortSSL
+      strURL         = "https://+:" & strTCPPortSSL
     Case Else
-      strURL         = "HTTP://" & UCase(strHost) & ":" & strTCPPortRS
+      strURL         = "http://" & UCase(strHost) & ":" & strTCPPortRS
   End Select
   strDebugMsg1       = "URL: " & strURL
   objRSInParam.Properties_.Item(CStr(strURLVar)) = strURL

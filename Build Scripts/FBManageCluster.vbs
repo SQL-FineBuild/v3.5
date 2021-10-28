@@ -130,7 +130,7 @@ End Sub
 
 
 Function CheckClusterHost()
-  Call DebugLog("CheckClusterHose:")
+  Call DebugLog("CheckClusterHost:")
 
   objWMIReg.GetStringValue strHKLM,"Cluster\","ClusterName",strClusterName
   Select Case True
