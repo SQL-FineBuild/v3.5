@@ -24,7 +24,7 @@ Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
 Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
 Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
-Dim strServer, strSIDDistComUsers, strSSLCert, strUser, strUserAccount, strUserDnsDomain, strWaitShort
+Dim strServer, strSIDDistComUsers, strSSLCert, strUser, strUserAccount, strUserDNSDomain, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -59,7 +59,7 @@ Private Sub Class_Initialize
   strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
   strSSLCert        = GetBuildfileValue("SSLCert")
   strUserAccount    = GetBuildfileValue("UserAccount")
-  strUserDnsDomain  = GetBuildfileValue("UserDnsDomain")
+  strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
   strWaitShort      = GetBuildfileValue("WaitShort")
 
   Set arrProfFolders  = objFSO.GetFolder(strProfDir).SubFolders
@@ -119,7 +119,9 @@ Sub CheckKerberosStatus()
 
   Call CheckServerMSAGroup(strServer)
 
-  Call CheckServerMSAGroup(strClusterName)
+  If strClusterName <> "" Then
+    Call CheckServerMSAGroup(strClusterName)
+  End If
 
 End Sub
 
@@ -128,7 +130,7 @@ Private Sub CheckServerMSAGroup(strServer)
   Call DebugLog("CheckServerMSAGroup: " & strServer)
   Dim strServerGroups
 
-  strServerGroups   = GetAccountAttr(strServer, strUserDnsDomain, "MemberOf")
+  strServerGroups   = GetAccountAttr(strServer, strUserDNSDomain, "memberOf")
   Select Case True
     Case strGroupMSA = ""
       ' Nothing
@@ -163,9 +165,11 @@ Function FormatAccount(strAccount)
   End Select
 
   Select Case True
-    Case strFmtAccount = strServer
+    Case StrComp(strFmtAccount, strServer, vbTextCompare) = 0
       strFmtAccount = strFmtAccount & "$"
-    Case strFmtAccount = strClusterName
+    Case strClusterName = ""
+      ' Nothing
+    Case StrComp(strFmtAccount, strClusterName, vbTextCompare) = 0
       strFmtAccount = strFmtAccount & "$"
   End Select
 
@@ -176,20 +180,22 @@ End Function
 
 Function FormatHost(strHostParm, strFDQN)
   Call DebugLog("FormatHost: " & strHostParm)
-  Dim strAlias, strUserDomain, strUserDNSDomain
+  Dim strAlias, strDomain
 
   strAlias          = strHostParm
-  strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
-  If strUserDNSDomain <> "" Then
-    strUserDNSDomain = "." & strUserDNSDomain
-  End If
+  Select Case True
+    Case strUserDNSDomain <> ""
+      strDomain     = "." & strUserDNSDomain
+    Case Else
+      strDomain     = "." & strServer
+  End Select
 
-  If UCase(Right(strAlias, Len(strUserDNSDomain))) = UCase(strUserDNSDomain) Then
-    strAlias        = Left(strAlias, Len(strAlias) - Len(strUserDNSDomain))
+  If UCase(Right(strAlias, Len(strDomain))) = UCase(strDomain) Then
+    strAlias        = Left(strAlias, Len(strAlias) - Len(strDomain))
   End If 
 
   If strFDQN = "F" Then
-    strAlias        = strAlias & strUserDNSDomain
+    strAlias        = strAlias & strDomain
   End If
 
   FormatHost       = strAlias
@@ -199,34 +205,22 @@ End Function
 
 Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
   Call DebugLog("GetAccountAttr: " & strUserAccount & ", " & strUserAttr)
-  Dim objACE, objAttr, objDACL, objField
-  Dim strAccount,strAttrObject, strAttrItem, strAttrList, strAttrValue, strSearchAttr
+' Code partially inspired by Guy Thomas https://www.computerperformance.co.uk/vbscript/group-user-memberof/
+  Dim colAttrItem
+  Dim objAccount, objACE, objAttr, objDACL
+  Dim strAccount,strAttrObject, strAttrItem, strAttrList, strAttrValue, strLDAPAccount
  
   strAttrItem       = ""
   strAttrValue      = ""
   strAccount        = FormatAccount(strUserAccount)
   intIdx            = Instr(strAccount, "\")
-  Select Case True
-    Case intIdx > 0
-      strAccount    = Mid(strAccount, intIdx  + 1)
-    Case StrComp(strAccount, strServer, vbTextCompare) = 0
-      strAccount    = strAccount & "$"
-    Case StrComp(strAccount, strClusterName, vbTextCompare) = 0
-      strAccount    = strAccount & "$"
-  End Select
-
-  Select Case True
-    Case strUserAttr = "msDS-GroupMSAMembership"
-      strSearchAttr = "msDS-ManagedPasswordId," & strUserAttr
-    Case Else
-      strSearchAttr = strUserAttr
-  End Select
+  If intIdx > 0 Then
+    strAccount      = Mid(strAccount, intIdx  + 1)
+  End If
 
   On Error Resume Next 
-  objADOCmd.CommandText = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName," & strSearchAttr
-  Set objRecordSet  = objADOCmd.Execute
-
-  On Error Goto 0
+  objADOCmd.CommandText = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(&(sAMAccountName=" & strAccount & "));distinguishedName"
+  Set objRecordSet  = objADOCmd.Execute ' Get distunguishedName for Account
   Select Case True
     Case Not IsObject(objRecordset)
       ' Nothing
@@ -236,42 +230,57 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
       ' Nothing
     Case objRecordset.RecordCount = 0 
       ' Nothing
-    Case strUserAttr = "msDS-GroupMSAMembership"
-      Select Case True
-        Case IsNull(objRecordset.Fields(1).Value) ' ManagedPasswordId only present for gMSA
-          ' Nothing
-        Case IsNull(objRecordset.Fields(2).Value) ' Empty msDS-GroupMSAMembership
-          strAttrValue = "> "
-        Case Else
-          strAttrValue   = "> " 
-          Set objField   = GetObject("LDAP://" & objRecordset.Fields(0).Value)  
-          Set objAttr    = objField.Get("msDS-GroupMSAMembership")
-          Set objDACL    = objAttr.DiscretionaryAcl
-          For Each objACE In objDACL
-            strAttrItem  = objACE.Trustee
-            If CheckGroup(strAttrItem, strUserDNSDomain) = True Then
-              strAttrValue = strAttrValue & strAttrItem & " "
-            End If
-          Next
-      End Select
-    Case IsNull(objRecordset.Fields(1).Value)
-      ' Nothing
-    Case Instr(strUserAttr, "SID") > 0
-      strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
-      strAttrValue  = HexStrToSIDStr(strAttrValue)
-    Case Instr(strUserAttr, "GUID") > 0
-      strAttrValue  = OctetToHexStr(objRecordset.Fields(1).Value)
-      strAttrValue  = HexStrToGUID(strAttrValue)
-    Case strUserAttr = "memberOf"
-      strAttrList   = ""
-      For Each strAttrItem In objRecordset.Fields(1).Value
-        strAttrList = strAttrList & Mid(strAttrItem, 4, Instr(strAttrItem, ",") - 4) & " "
-      Next
-      strAttrValue = RTrim(strAttrList)
     Case Else
-      strAttrValue  = objRecordset.Fields(1).Value
+      strLDAPAccount = "LDAP://" & objRecordset.Fields(0).Value
+      Set objAccount = GetObject(strLDAPAccount) ' Get data for Account
+      Select Case True
+        Case Not IsObject(objAccount)
+          ' Nothing
+        Case strUserAttr = "msDS-GroupMSAMembership"
+          Select Case True
+            Case IsNull(objAccount.Get("msDS-ManagedPasswordId")) ' ManagedPasswordId only present for gMSA
+              ' Nothing
+            Case IsNull(objAccount.Get("msDS-GroupMSAMembership"))
+              strAttrValue = "> "
+            Case Else
+              strAttrValue = "> " 
+              Set objAttr  = objAccount.Get("msDS-GroupMSAMembership")
+              Set objDACL  = objAttr.DiscretionaryAcl
+              For Each objACE In objDACL
+                strAttrItem  = objACE.Trustee
+                If CheckGroup(strAttrItem, strUserDNSDomain) = True Then
+                  strAttrValue = strAttrValue & strAttrItem & " "
+                End If
+              Next
+          End Select
+        Case IsNull(objAccount.Get(strUserAttr))
+          ' Nothing
+        Case Instr(strUserAttr, "SID") > 0
+          strAttrValue = OctetToHexStr(objAccount.Get(strUserAttr))
+          strAttrValue = HexStrToSIDStr(strAttrValue)
+        Case Instr(strUserAttr, "GUID") > 0
+          strAttrValue = OctetToHexStr(objAccount.Get(strUserAttr))
+          strAttrValue = HexStrToGUID(strAttrValue)
+        Case strUserAttr = "memberOf"
+          strAttrList  = ""
+          colAttrItem  = objAccount.GetEx(strUserAttr)
+          For Each strAttrItem In colAttrItem
+            strAttrList = strAttrList & Mid(strAttrItem, 4, Instr(strAttrItem, ",") - 4) & " "
+          Next
+          strAttrValue = RTrim(strAttrList)
+        Case strUserAttr = "member"
+          strAttrList  = ""
+          colAttrItem  = objAccount.GetEx(strUserAttr)
+          For Each strAttrItem In colAttrItem
+            strAttrList = strAttrList & strAttrItem & " "
+          Next
+          strAttrValue = RTrim(strAttrList)
+        Case Else
+          strAttrValue  = objAccount.Get(strUserAttr)
+      End Select
   End Select
 
+  On Error Goto 0
   err.Number        = 0
   GetAccountAttr    = strAttrValue
 
@@ -299,11 +308,10 @@ End Function
 
 Function GetDomainAttr(strDomAttr)
   Call DebugLog("GetDomainAttr: " & strDomAttr)
-  Dim strAttrValue, strUserDNSDomain
+  Dim strAttrValue
   On Error Resume Next 
 
   strAttrValue      = ""
-  strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
   If strUserDNSDomain <> "" Then
     objADOCmd.CommandText = "<LDAP://DC=" & Replace(strUserDNSDomain, ".", ",DC=") & ">;(objectClass=domain);name," & strDomAttr
     Set objRecordSet      = objADOCmd.Execute
