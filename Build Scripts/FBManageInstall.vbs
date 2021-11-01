@@ -59,7 +59,7 @@ Dim strPathInst
 
 Class FBManageInstallClass
 Dim objFile, objFolder, objFSO, strLogXtra, objShell, objWMIReg
-Dim strPathAddComp, strPathTemp, strStatusFile, strStatusVar, strWaitShort
+Dim strPathAddComp, strPathTemp, strStatusFile, strStatusVar, strWaitMed, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -72,6 +72,7 @@ Private Sub Class_Initialize
   strPathAddComp    = GetBuildfileValue("PathAddComp")
   strPathTemp       = GetBuildfileValue("PathTemp")
   strPathInst       = ""
+  strWaitMed        = GetBuildfileValue("WaitMed")
   strWaitShort      = GetBuildfileValue("WaitShort")
 
 End Sub
@@ -299,6 +300,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       Set objFolder = objApp.NameSpace(objFile.Path).Items( )
       Set objTarget = objApp.NameSpace(strNewPath)
       objTarget.CopyHere objFolder, 256 + 16
+      WScript.Sleep strWaitMed
       For Each objItem in objTarget.Items()
         intItems    = intItems + 1
         If objItem.IsFolder = True Then
@@ -311,9 +313,8 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
         Case intItems > 1
           ' Nothing
         Case Else
-          strNewPath = strNewPath & strZipPath
+          strNewPath = strNewPath & strZipPath & "\"
       End Select
-      WScript.Sleep strWaitShort
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
       Select Case True
@@ -329,7 +330,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       strDebugMsg2  = "Target: " & strNewPath
       strCmd        = "EXPAND """ & strPathInst & """ -F:* """ & strNewPath & """"
       Call Util_RunExec(strCmd, "", "", 0)
-      WScript.Sleep strWaitShort
+      WScript.Sleep strWaitMed
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
       Select Case True
@@ -571,7 +572,7 @@ Private Function RunInstall_Process(strInstName, objInstParm)
   End Select
 
   Select Case True
-    Case Not objFSO.FileExists(Replace(strPathLog, """", ""))
+    Case Not CheckFile(Replace(strPathLog, """", ""))
       ' Nothing
     Case strLogClean = "Y" 
       Call LogClean(strPathLog)
@@ -651,7 +652,7 @@ Private Sub RunInstall_Menu(strInstName, objInstParm)
       strDebugMsg1  = "Source: " & strPathOld
       strDebugMsg2  = "Target: " & strPathNew
       Select Case True
-        Case Not objFSO.FileExists(strPathOld)
+        Case Not CheckFile(strPathOld)
           If UCase(strMenuError) <> strMsgIgnore Then
             Call SetBuildMessage(strMenuError, "Setup" & strInstName & ": " & strMenuName & " Menu source file not found " & strPathOld)
           End If
@@ -659,7 +660,7 @@ Private Sub RunInstall_Menu(strInstName, objInstParm)
         Case Not objFSO.FolderExists(strPathNew)
           objFSO.CreateFolder(strPathNew)
       End Select
-      If Not objFSO.FileExists(strPathNew & "\" & strMenuName & ".lnk") Then
+      If Not CheckFile(strPathNew & "\" & strMenuName & ".lnk") Then
         Set objShortcut = objShell.CreateShortcut(strPathNew & "\" & strMenuName & ".lnk")
         objShortcut.TargetPath       = strPathOld
         objShortcut.WorkingDirectory = Left(strPathOld, InstrRev(strPathOld, "\") - 1)
@@ -702,15 +703,15 @@ Function GetPathInst(strInstFile, strPathMain, strPathAlt)
   End If
 
   Select Case True
-    Case objFSO.FileExists(strPathInst & strInstNLS)
+    Case CheckFile(strPathInst & strInstNLS)
       strPathInst   = strPathInst & strInstNLS
-    Case objFSO.FileExists(strPathInst & strInstFile)
+    Case CheckFile(strPathInst & strInstFile)
       strPathInst   = strPathInst & strInstFile
     Case strPathInstAlt = "" 
       strPathInst   = ""
-    Case objFSO.FileExists(strPathInstAlt & strInstNLS)
+    Case CheckFile(strPathInstAlt & strInstNLS)
       strPathInst   = strPathInstAlt & strInstNLS
-    Case objFSO.FileExists(strPathInstAlt & strInstFile)
+    Case CheckFile(strPathInstAlt & strInstFile)
       strPathInst   = strPathInstAlt & strInstFile
     Case Else 
       strPathInst   = ""
@@ -741,7 +742,7 @@ Sub SetTrustedZone(strPathExe)
   Set objFile       = objFSO.GetFile(strPathExe)
   strAltFile        = objFile.Path & ":Zone.Identifier"
   strDebugMsg1      = "Alt Path: " & strAltFile
-  If objFSO.FileExists(strAltFile) Then
+  If CheckFile(strAltFile) Then
     Set objFile     = objFSO.CreateTextFile(strAltFile, True)
     objFile.WriteLine "[ZoneTransfer]"
     objFile.WriteLine "ZoneId=1"

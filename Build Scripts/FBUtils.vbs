@@ -62,6 +62,18 @@ Private Sub Class_Initialize
 End Sub
 
 
+Function CheckFile(strFile)
+  Call DebugLog("CheckFile: " & strFile)
+
+  Select Case True
+    Case objFSO.FileExists(strFile)
+      CheckFile     = True
+    Case Else
+      CheckFile     = False
+  End Select
+
+End Function
+
 Sub CopyFile(strSource, strTarget)
   Call DebugLog("CopyFile: " & strSource & " to " & strTarget)
   Dim strTgtFolder
@@ -676,6 +688,10 @@ End Class
 Sub CopyFile(strSource, strTarget)
   Call FBUtils.CopyFile(strSource, strTarget)
 End Sub
+
+Function CheckFile(strFile)
+  CheckFile         = FBUtils.CheckFile(strFile)
+End Function
 
 Sub DeleteFile(strFile)
   Call FBUtils.DeleteFile(strFile)

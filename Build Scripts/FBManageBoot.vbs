@@ -1,7 +1,7 @@
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '
 '  FBManageBoot.vbs  
-'  Copyright FineBuild Team © 2017 - 2019.  Distributed under Ms-Pl License
+'  Copyright FineBuild Team © 2017 - 2021.  Distributed under Ms-Pl License
 '
 '  Purpose:      Manage the FineBuild Boot processing 
 '
@@ -112,6 +112,7 @@ Sub SetupReboot(strLabel, strDescription)
   End If
 
   strCmd            = objShell.ExpandEnvironmentStrings("%COMSPEC%")  & " /D /k " 
+  strCmd            = strCmd &  "PING localhost -n 2 >NUL & " ' Add 1 second delay
   strCmd            = strCmd &  strFBPath & """" & strFBCmd & """"
   strCmd            = strCmd & " /Type:" & GetBuildfileValue("Type") & " /SQLVersion:" & GetBuildfileValue("AuditVersion") & " /Instance:" & GetBuildfileValue("Instance") & " /IAcceptLicenseTerms /Restart:Yes " 
   strStopAt         = GetBuildFileValue("StopAt")
