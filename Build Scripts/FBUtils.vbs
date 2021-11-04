@@ -66,7 +66,7 @@ Function CheckFile(strFile)
   Call DebugLog("CheckFile: " & strFile)
 
   Select Case True
-    Case objFSO.FileExists(strFile)
+    Case objFSO.FileExists(strFile) = True
       CheckFile     = True
     Case Else
       CheckFile     = False
@@ -302,8 +302,13 @@ Function GetSQLData(strCmd, strCmdItem)
   Call DebugLog("GetSQLData: " & strCmd & ": " & strCmdItem)
 
   Set objSQLData    = objSQL.Execute(strCmd)
-  objSQLData.MoveFirst
-  GetSQLData        = objSQLData.Fields(strCmdItem)
+  Select Case True
+    Case objSQLData.RecordCount > 0
+      objSQLData.MoveFirst
+      GetSQLData    = objSQLData.Fields(strCmdItem)
+    Case Else
+      GetSQLData    = ""
+  End Select
 
 End Function
 

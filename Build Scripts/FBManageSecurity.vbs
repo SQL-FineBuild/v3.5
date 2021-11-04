@@ -24,7 +24,7 @@ Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
 Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
 Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
-Dim strServer, strSIDDistComUsers, strSSLCert, strUser, strUserAccount, strUserDNSDomain, strWaitShort
+Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertThumb, strUser, strUserAccount, strUserDNSDomain, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -58,6 +58,7 @@ Private Sub Class_Initialize
   strServer         = GetBuildfileValue("AuditServer")
   strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
   strSSLCert        = GetBuildfileValue("SSLCert")
+  strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
   strUserAccount    = GetBuildfileValue("UserAccount")
   strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
   strWaitShort      = GetBuildfileValue("WaitShort")
@@ -926,37 +927,23 @@ End Sub
 
 Sub SetIISSSL()
   Call DebugLog("SetIISSSL:")
-  Dim objIIS, objSite, objSites
 
   Select Case True
     Case strOSVersion < "6.0"
-      Set objSites = GetObject("IIS://" & strServer & "/W3SVC" )
+      ' TBC
     Case Else
-      Set objIIS   = GetObject("winmgmts:root\WebAdministration")
-      Set objSites = objIIS.InstancesOf("Site")
+      strCmd        = "NETSH HTTP DELETE SSLCERT IPPORT=""0.0.0.0:443"" "
+      Call Util_RunExec(strCmd, "", "", -1)
+      strCmd        = "NETSH HTTP ADD SSLCERT IPPORT=""0.0.0.0:443"" CERTHASH=""" & strSSLCertThumb & """ CERTSTORE=""my"" APPID=""{4fb6d93c-0683-4d9a-8f98-d948bff0e666}"" " ' PowerBI Server AppId
+      Call Util_RunExec(strCmd, "", "", -1)
   End Select
-
-  For Each objSite In objSites
-    Call DebugLog(objSite.Name)
-    Select Case True
-      Case strOSVersion < "6.0"
-        ' TBC
-      Case Else
-        strCmd        = "NETSH HTTP DELETE SSLCERT IPPORT=""0.0.0.0:443"" "
-        Call Util_RunExec(strCmd, "", "", -1)
-        strCmd        = "NETSH HTTP ADD SSLCERT IPPORT=""0.0.0.0:443"" CERTHASH=""" & strSSLCertThumb & """ CERTSTORE=""my"" APPID=""{4fb6d93c-0683-4d9a-8f98-d948bff0e666}"" " ' PowerBI Server AppId
-        Call Util_RunExec(strCmd, "", "", -1)
-    End Select
-  Next
 
 End Sub
 
 
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
   Call DebugLog("SetSQLDBSSL: " & strSQLDBPath & " for " & strSQLDBAccount)
-  Dim strSSLCertThumb
 
-  strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
   Call SetCertAuth(strSSLCertThumb, strSQLDBAccount)
 
   strPath           = strSQLDBPath

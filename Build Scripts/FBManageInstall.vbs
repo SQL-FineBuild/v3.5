@@ -263,7 +263,6 @@ End Function
 Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
   Call DebugLog("RunInstall_Setup:")
   Dim objApp, objItem, objTarget
-  Dim intItems
   Dim strCmd, strInstOption, strInstType, strNewFile, strNewPath, strParmExtract, strPathMain, strPathAlt, strZipPath
   Dim strSetupOption, strStatusSetup
 
@@ -292,39 +291,21 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
   Select Case True
     Case strInstType = ".ZIP"
       Call SetTrustedZone(strPathInst)
-      strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
+      strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
+      strNewPath    = Replace(strNewPath & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
       strZipPath    = ""
-      intItems      = 0
       Call CreateSetupFolder(strNewPath, "Y")
       Set objFile   = objFSO.GetFile(strPathInst)
       Set objFolder = objApp.NameSpace(objFile.Path).Items( )
       Set objTarget = objApp.NameSpace(strNewPath)
       objTarget.CopyHere objFolder, 256 + 16
       WScript.Sleep strWaitMed
-      For Each objItem in objTarget.Items()
-        intItems    = intItems + 1
-        If objItem.IsFolder = True Then
-          strZipPath = "\" & objItem.Name
-        End If
-      Next 
-      Select Case True
-        Case strZipPath = ""
-          ' Nothing
-        Case intItems > 1
-          ' Nothing
-        Case Else
-          strNewPath = strNewPath & strZipPath & "\"
-      End Select
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
+      strNewPath    = strNewPath & GetZipPath(objTarget, strZipPath)
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
-      Select Case True
-        Case strInstOption = "NONE" 
-          ' Nothing
-        Case strNewPath = "" 
-          Exit Function
-      End Select
     Case strInstType = ".CAB"
-      strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
+      strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
+      strNewPath    = Replace(strNewPath & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
       Call CreateSetupFolder(strNewPath, "Y")
       strDebugMsg1  = "Source: " & strPathInst
       strDebugMsg2  = "Target: " & strNewPath
@@ -333,21 +314,15 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       WScript.Sleep strWaitMed
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
-      Select Case True
-        Case strInstOption = "NONE" 
-          ' Nothing
-        Case strNewPath = "" 
-          Exit Function
-      End Select
     Case strInstType = ".PDF"
-      strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
+      strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
+      strNewPath    = Replace(strNewPath & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
       Call CreateSetupFolder(strNewPath, "Y")
       Call CopyFile(strPathInst, strNewPath)
-      If GetPathInst(strInstFile, strNewPath, "") = "" Then
-        Exit Function
-      End If
+      strNewPath    = GetPathInst(strInstFile, strNewPath, "") 
     Case strSetupOption = "EXTRACT" ' Extact contents from Install File before installing
-      strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
+      strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
+      strNewPath    = Replace(strNewPath & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
       Call CreateSetupFolder(strNewPath, "Y")
       strDebugMsg1  = "Source: " & strPathInst
       strDebugMsg2  = "Target: " & strNewPath
@@ -360,20 +335,22 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       Wscript.Sleep strWaitShort
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
-      Select Case True
-        Case strInstOption = "NONE" 
-          ' Nothing
-        Case strNewPath = "" 
-          Exit Function
-      End Select
     Case strSetupOption = "COPY" ' Copy Install File to local folder before installing
-      strNewPath    = Replace(GetXMLParm(objInstParm, "InstTarget", strPathTemp) & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
+      strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
+      strNewPath    = Replace(strNewPath & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
       Call CreateSetupFolder(strNewPath, "Y")
       Call CopyFile(strPathInst, strNewPath)
-      If GetPathInst(strInstFile, strNewPath, "") = "" Then
-        Exit Function
-      End If
+      strNewPath    = GetPathInst(strInstFile, strNewPath, "")
       Call SetTrustedZone(strPathInst)
+    Case Else
+      strNewPath    = strInstFile
+  End Select
+
+  Select Case True
+    Case strInstOption = "NONE" 
+      ' Nothing
+    Case strNewPath = "" 
+      Exit Function
   End Select
 
   RunInstall_Setup  = True
@@ -398,6 +375,27 @@ Private Sub CreateSetupFolder(strFolder, strReset)
   Call SetupFolder(strFolder)
 
 End Sub
+
+
+Private Function GetZipPath(objFolder, strZipPath)
+  Call DebugLog("GetZipPath: " & objFolder.Title)
+  Dim objItem
+
+  Select Case True
+    Case objFolder.Items.Count <> 1
+      ' Nothing
+    Case Else
+      For Each objItem In objFolder.Items
+        If objItem.IsFolder = True Then
+          strZipPath  = strZipPath & objItem.Name & "\" 
+'          strZipPath  = strZipPath & GetZipPath(objItem.GetFolder, strZipPath)
+        End If
+      Next
+  End Select
+
+  GetZipPath        = strZipPath
+
+End Function
 
 
 Private Function RunInstall_Process(strInstName, objInstParm)

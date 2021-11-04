@@ -111,10 +111,10 @@ Sub SetupReboot(strLabel, strDescription)
     strFBPath       = "NET USE " & strFBVol & ": """ & strFBPath & """ /PERSISTENT:NO & "
   End If
 
-  strCmd            = objShell.ExpandEnvironmentStrings("%COMSPEC%")  & " /D /k " 
-  strCmd            = strCmd &  "PING localhost -n 2 >NUL & " ' Add 1 second delay
+  strCmd            = objShell.ExpandEnvironmentStrings("%COMSPEC%") & " /d /k " 
+  strCmd            = strCmd &  "TIMEOUT 2 & " ' Add 2 second delay
   strCmd            = strCmd &  strFBPath & """" & strFBCmd & """"
-  strCmd            = strCmd & " /Type:" & GetBuildfileValue("Type") & " /SQLVersion:" & GetBuildfileValue("AuditVersion") & " /Instance:" & GetBuildfileValue("Instance") & " /IAcceptLicenseTerms /Restart:Yes " 
+  strCmd            = strCmd & " /Type:" & GetBuildfileValue("Type") & " /SQLVersion:" & GetBuildfileValue("AuditVersion") & " /Instance:" & GetBuildfileValue("Instance") & " /Restart:Yes " 
   strStopAt         = GetBuildFileValue("StopAt")
   Select Case True
     Case GetBuildfileValue("StopAtFound") <> "YES"
@@ -126,12 +126,16 @@ Sub SetupReboot(strLabel, strDescription)
     Case Else
       strCmd        = strCmd & " /StopAt:" & strStopAt
   End Select
+  If Len(strCmd) > 260 Then
+    strCmd          = objShell.ExpandEnvironmentStrings("%COMSPEC%") & " /d /k ECHO Restart command is over 260 characters long.  FineBuild must be restarted manually"
+  End If
 
-  strPath           = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce\FineBuild" & strLabel
-  strAdminPassword  = GetBuildfileValue("AdminPassword")
-  Call Util_RegWrite(strPath, strCmd, "REG_SZ")
+  strPath           = "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce\FineBuild"
+  Call Util_RegWrite(strPath, strCmd, "REG_SZ") ' WARNING must be 260 characters or less or it will be ignored
   Call DebugLog("Restart Command: " & strCmd)
   Call SetBuildfileValue("RebootStatus", "Done")
+
+  strAdminPassword  = GetBuildfileValue("AdminPassword")
   If strAdminPassword <> "" Then
     strPath         = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\AutoAdminLogon"
     Call Util_RegWrite(strPath, "1", "REG_SZ")
