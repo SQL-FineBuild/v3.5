@@ -24,7 +24,8 @@ Dim intRSLcid
 Class FBManageRSWMIClass
   Dim objRSConfig, objRSWMI, objShell
   Dim strFunction, strInstRS, strInstRSSQL, strOSVersion, strPath, strRSAlias, strRSNamespace, strRSNetName, strRSWMIPath
-  Dim strServer, strSetupPowerBI, strSetupSSL, strSetupSQLRSCluster, strSSLCertThumb, strTCPPortRS, strTCPPortSSL, strSQLVersion, strWMIPath
+  Dim strServer, strSetupPowerBI, strSetupSSL, strSetupSQLRSCluster, strSSLCertThumb
+  Dim strTCPPortRS, strTCPPortSSL, strSQLVersion, strWaitMed, strWMIPath
 
 
 Private Sub Class_Initialize
@@ -49,6 +50,7 @@ Private Sub Class_Initialize
   strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
   strTCPPortRS      = GetBuildfileValue("TCPPortRS")
   strTCPPortSSL     = GetBuildfileValue("TCPPortSSL")
+  strWaitMed        = GetBuildfileValue("WaitMed")
 
   Select Case True
     Case strSQLVersion <= "SQL2005"
@@ -125,6 +127,8 @@ Sub SetRSDatabase(strServer, strRSDBName)
   objRSInParam.Properties_.Item("UserName")          = ""
   objRSInParam.Properties_.Item("Password")          = ""
   Call RunRSWMI(strFunction, "")
+
+  Wscript.Sleep strWaitMed
 
 End Sub
 
