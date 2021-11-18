@@ -361,7 +361,7 @@ Sub ProcessEnd(strStatus)
   End If
 
   Select Case True
-    Case strRestart >= strProcessIdLabel
+    Case strRestart > strProcessIdLabel
       ' Nothing
     Case strStopAt = ""
       ' Nothing

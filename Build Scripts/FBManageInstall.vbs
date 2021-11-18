@@ -58,13 +58,14 @@ Dim FBManageInstall: Set FBManageInstall = New FBManageInstallClass
 Dim strPathInst
 
 Class FBManageInstallClass
-Dim objFile, objFolder, objFSO, strLogXtra, objShell, objWMIReg
+Dim objApp, objFile, objFolder, objFSO, strLogXtra, objShell, objWMIReg
 Dim strPathAddComp, strPathTemp, strStatusFile, strStatusVar, strWaitMed, strWaitShort
 
 
 Private Sub Class_Initialize
   Call DebugLog("FBManageInstall Class_Initialize:")
 
+  Set objApp        = CreateObject ("Shell.Application")
   Set objFSO        = CreateObject("Scripting.FileSystemObject")
   Set objShell      = WScript.CreateObject ("Wscript.Shell")
   Set objWMIReg     = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\default:StdRegProv")
@@ -141,16 +142,8 @@ Private Function RunInstall_PreCon(strInstName, strInstFile, objInstParm)
   Select Case True
     Case strPreConType = "FILE"
       RunInstall_PreCon = RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
-      If RunInstall_PreCon Then
-        Call DebugLog(" " & strProcessIdDesc & strStatusBypassed)
-        Call SetBuildFileValue(strStatusVar, strStatusBypassed)
-      End If
     Case Else
       RunInstall_PreCon = RunInstall_PreCon_Registry(objInstParm)
-      If RunInstall_PreCon Then
-        Call DebugLog(" " & strProcessIdDesc & strStatusPreConfig)
-        Call SetBuildFileValue(strStatusVar, strStatusPreConfig)
-      End If
   End Select
 
   Select Case True
@@ -184,6 +177,8 @@ Private Function RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
   End Select
 
   If GetPathInst(strInstFile, strPathMain, strPathAlt) = "" Then
+    Call SetBuildFileValue(strStatusVar, strStatusBypassed & ", no media")
+    RunInstall_PreCon_File = True
     Exit Function
   End If
 
@@ -206,6 +201,7 @@ Private Function RunInstall_PreCon_File(strInstName, strInstFile, objInstParm)
     Exit Function
   Next
 
+  Call SetBuildFileValue(strStatusVar, strStatusPreConfig)
   RunInstall_PreCon_File = True
 
 End Function
@@ -255,6 +251,7 @@ Private Function RunInstall_PreCon_Registry(objInstParm)
       Exit Function
   End Select
 
+  Call SetBuildFileValue(strStatusVar, strStatusPreConfig)
   RunInstall_PreCon_Registry = True
 
 End Function
@@ -262,12 +259,11 @@ End Function
 
 Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
   Call DebugLog("RunInstall_Setup:")
-  Dim objApp, objItem, objTarget
-  Dim strCmd, strInstOption, strInstType, strNewFile, strNewPath, strParmExtract, strPathMain, strPathAlt, strZipPath
+  Dim objItem, objTarget
+  Dim strCmd, strInstOption, strInstType, strNewFile, strNewPath, strParmExtract, strPathMain, strPathAlt
   Dim strSetupOption, strStatusSetup
 
   RunInstall_Setup  = False
-  Set objApp        = CreateObject ("Shell.Application")
   Call SetBuildfileValue("RebootLoop", "0")
   strNewPath        = ""
   strInstOption     = UCase(GetXMLParm(objInstParm, "InstOption",  "Install"))
@@ -293,15 +289,14 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       Call SetTrustedZone(strPathInst)
       strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
       strNewPath    = Replace(strNewPath & "\" & strInstName, "\\" & strInstName, "\" & strInstName)
-      strZipPath    = ""
       Call CreateSetupFolder(strNewPath, "Y")
       Set objFile   = objFSO.GetFile(strPathInst)
-      Set objFolder = objApp.NameSpace(objFile.Path).Items( )
+      Set objFolder = objApp.NameSpace(objFile.Path).Items()
       Set objTarget = objApp.NameSpace(strNewPath)
       objTarget.CopyHere objFolder, 256 + 16
       WScript.Sleep strWaitMed
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
-      strNewPath    = strNewPath & GetZipPath(objTarget, strZipPath)
+      strNewPath    = strNewPath & "\" & GetExtractPath(objTarget)
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
     Case strInstType = ".CAB"
       strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
@@ -313,6 +308,7 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       Call Util_RunExec(strCmd, "", "", 0)
       WScript.Sleep strWaitMed
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
+      strNewPath    = strNewPath & "\" & GetExtractPath(objApp.NameSpace(strNewPath))
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
     Case strInstType = ".PDF"
       strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
@@ -332,8 +328,9 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
       End If
       strCmd        = """" & strPathInst & """ " & strParmExtract & """" & strNewPath & """"
       Call Util_RunExec(strCmd, "", "", 0)
-      Wscript.Sleep strWaitShort
+      Wscript.Sleep strWaitMed
       strNewFile    = GetXMLParm(objInstParm, "InstFile", "Setup.exe")
+      strNewPath    = strNewPath & "\" & GetExtractPath(objApp.NameSpace(strNewPath))
       strNewPath    = GetPathInst(strNewFile, strNewPath, "")
     Case strSetupOption = "COPY" ' Copy Install File to local folder before installing
       strNewPath    = GetXMLParm(objInstParm, "InstTarget", strPathTemp)
@@ -354,7 +351,6 @@ Private Function RunInstall_Setup(strInstName, strInstFile, objInstParm)
   End Select
 
   RunInstall_Setup  = True
-  Set objAPP        = Nothing
   Set objTarget     = Nothing
 
 End Function
@@ -377,9 +373,10 @@ Private Sub CreateSetupFolder(strFolder, strReset)
 End Sub
 
 
-Private Function GetZipPath(objFolder, strZipPath)
-  Call DebugLog("GetZipPath: " & objFolder.Title)
+Private Function GetExtractPath(objFolder)
+  Call DebugLog("GetExtractPath: " & objFolder.Title)
   Dim objItem
+  Dim strPath
 
   Select Case True
     Case objFolder.Items.Count <> 1
@@ -387,13 +384,13 @@ Private Function GetZipPath(objFolder, strZipPath)
     Case Else
       For Each objItem In objFolder.Items
         If objItem.IsFolder = True Then
-          strZipPath  = strZipPath & objItem.Name & "\" 
-'          strZipPath  = strZipPath & GetZipPath(objItem.GetFolder, strZipPath)
+          strPath   = objItem.Name & "\" 
+          strPath   = strPath & GetExtractPath(objApp.NameSpace(objItem.Path))
         End If
       Next
   End Select
 
-  GetZipPath        = strZipPath
+  GetExtractPath    = strPath
 
 End Function
 
@@ -582,7 +579,7 @@ Private Function RunInstall_Process(strInstName, objInstParm)
     Case Left(strPathInst, Len(strPathTemp)) <> strPathTemp
       ' Nothing
     Case Else
-      Call DeleteFolder(strPathInst)
+      Call DeleteFolder(Left(strPathInst, Len(strPathInst) - Len(strInstFile)))
       If strMSILayer <> "" Then                
         objWMIReg.DeleteValue strHKCU, Mid(strMSILayer, 6), strPathInst
       End If

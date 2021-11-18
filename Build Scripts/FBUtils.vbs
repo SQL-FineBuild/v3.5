@@ -277,8 +277,9 @@ Function GetPSData(strCmd)
   Set objExec       = objShell.Exec("POWERSHELL " & strCmd)
   objExec.StdIn.Close
   strPSData         = objExec.StdOut.ReadAll
+  strPSData         = "  " & strPSData
   strPSData         = Left(strPSData, Len(strPSData) - 2) & Replace(Replace(Right(strPSData, 2), Chr(10), ""), Chr(13), "")
-  GetPSData         = strPSData
+  GetPSData         = LTrim(strPSData)
 
 End Function
 
@@ -315,7 +316,8 @@ End Function
 
 Sub SetupFolder(objParm)
   Dim objParmParent
-  Dim strPath, strPathParent, strSecurity, strShare
+  Dim intIdx
+  Dim strPath, strPathParent, strSecurity, strRoot
 
   Select Case True
     Case IsObject(objParm) = 0
@@ -333,15 +335,13 @@ Sub SetupFolder(objParm)
     Case Right(strPath, 1) = "\" 
       strPath       = Left(strPath, Len(strPath) - 1)
   End Select
-  Select Case True
-    Case Left(strPath, 2) <> "\\"
-      ' Nothing
-    Case Instr(3, strPath, "\") = 0
-      strShare      = strPath
-    Case Else
-      strShare      = Left(strPath, Instr(3, strPath, "\") - 1)
-  End Select
 
+  intIdx            = Instr(4, strPath, "\")
+  If intIdx = 0 Then
+    SetupFolder     = strPath
+    Exit Sub
+  End If
+  strRoot           = Left(strPath, intIdx - 1)
   strPathParent     = Left(strPath, InstrRev(strPath, "\") - 1)
   strDebugMsg1      = "PathParent: " & strPathParent
 

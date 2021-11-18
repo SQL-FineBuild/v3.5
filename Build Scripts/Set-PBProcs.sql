@@ -9,12 +9,12 @@
 --    commands, which prevents them from working.  This condition does not trigger an error in the 
 --    Microsoft PolyBase install, so the relevant processing is repeated here to ensure the relevant
 --    accounts and permissions are created.
--- 2. The guid value used as the Certificate Password must be the same on all servers in the failover set
+-- 2. The value used as the Certificate Credential must be the same on all servers in the failover set.
 --    The Microsoft code generates a unique guid value for each server it is run on, but
 --    this causes problems when the servers are in a Distributed Availability Group set or
 --    an Availability Group set.  The main symptom is that the Polybase DMS service will fail
---    on secondary servers.  The calling process for this script works out the correct
---    value for the Certificate Password and passes this as a parameter to this routine.
+--    on secondary servers.  The calling process for this script provides a consistent
+--    value for the Certificate Credential and passes this as a parameter to this routine.
 
 USE [DWConfiguration]
 GO
@@ -92,7 +92,7 @@ BEGIN;
     END;');
     GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_sm_detach] TO [$(strPBSvcAcnt)];
 
-    --Create a certificate and sign the procedure with a password unique to the Failover group
+    --Create a certificate and sign the procedure with a credential unique to the Failover group
     IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_SmDetachSigningCertificate##') 
     BEGIN;
         PRINT 'DROP CERTIFICATE _##PDW_SmDetachSigningCertificate##';
@@ -155,7 +155,7 @@ BEGIN;
     END;');
     GRANT EXEC ON [DWConfiguration].dbo.[sp_pdw_polybase_authorize] TO [$(strPBSvcAcnt)];
 
-    --Create a certificate and sign the procedure with a password unique to the Failover group
+    --Create a certificate and sign the procedure with a credential unique to the Failover group
     IF EXISTS (SELECT * FROM [sys].[certificates] WHERE name = N'_##PDW_PolyBaseAuthorizeSigningCertificate##') 
     BEGIN;
         PRINT 'DROP CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
