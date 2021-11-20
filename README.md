@@ -18,5 +18,5 @@ Changes compared to v3.4.0:
 * Added parameter /ClusWinSuffix:
 * Added parameters /ClusDBIPExtra: /ClusASIPExtra: /ClusRSIPExtra:
 * Added support for SQL Server 2019
-* Added support for Windows Server 2019
+* Added support for Windows Server 2019 and Windows Server 2022
 * Greatly improved support for Availability Groups
