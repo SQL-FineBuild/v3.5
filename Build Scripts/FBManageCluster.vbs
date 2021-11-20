@@ -956,10 +956,16 @@ Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
         Call SetResourceOff(strClusterNetwork, "")
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PROP PendingTimeout=600000:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV PublishPTRRecords=1 "
+        Call Util_RunExec(strCmd, "", strResponseYes, 0)
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireDNS=1:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireKerberos=1:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        If strOSVersion >= "6" Then
+          strCmd    = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV DeleteVcoOnResCleanup=1:DWORD "
+          Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        End If
       Case Else
         Call SetResourceOff(strClusterNetwork, "")
         Call RemoveOwner(strClusterNetwork, objClusNode.Name)
