@@ -271,36 +271,6 @@ Private Sub HideBuildPassword(strName)
 End Sub
 
 
-Private Function HidePassword(strText, strKeyword)
-  ' Change any passwords to ********
-  Dim intIdx, intFound, intLen
-  Dim strLogText
-
-  strLogText        = strText
-  intLen            = Len(strLogText)
-  intIdx = Instr(1, strLogText, strKeyword, vbTextCompare)
-  While intIdx > 0
-    intFound        = 0
-    intIdx          = intIdx + Len(strKeyword)
-    While (Instr(""":=' ", Mid(strLogText, intIdx, 1)) > 0 ) And (intIdx < intLen)
-      intIdx        = intIdx + 1
-      intFound      = 1
-    Wend
-    While (Instr(""",/' ", Mid(strLogText, intIdx, 1)) = 0) And (IntFound > 0)
-      strLogText    = Left(strLogText, intIdx - 1) & Chr(01) & Mid(strLogText, intIdx + 1)
-      intIdx        = intIdx + 1
-    Wend
-    intIdx          = Instr(intIdx, strLogText, strKeyword, vbTextCompare)
-  WEnd
-  While Instr(strLogText, Chr(01) & Chr(01)) > 0
-    strLogText      = Replace(Replace(Replace(strLogText, Chr(01) & Chr(01) & Chr(01) & Chr(01), Chr(01)), Chr(01) & Chr(01) & Chr(01), Chr(01)), Chr(01) & Chr(01), Chr(01))
-  Wend
-  strLogText        = Replace(strLogText, Chr(01), "**********")
-  HidePassword      = strLogText
-
-End Function
-
-
 Function HidePasswords(strText)
   ' Hide passwords in Text string
   Dim strLogText
@@ -314,6 +284,37 @@ Function HidePasswords(strText)
     strLogText      = HidePassword(strLogText, " -p ")
   End If
   HidePasswords     = strLogText
+
+End Function
+
+
+Private Function HidePassword(strText, strKeyword)
+  ' Change any passwords to ********
+  Dim intIdx, intFound, intLen, intStart
+  Dim strLogText
+
+  strLogText        = strText
+  intLen            = Len(strLogText)
+  intStart          = Instr(1, strLogText, strKeyword, vbTextCompare)
+  While intStart > 0
+    intFound        = 0
+    intStart        = intStart + Len(strKeyword)
+    intIdx          = intStart
+    While (Instr(""":=' ", Mid(strLogText, intIdx, 1)) > 0 ) And (intIdx < intLen) ' Look for start of password value
+      intIdx        = intIdx + 1
+      intFound      = 1
+    Wend
+    While (Instr(Chr(13) + """,/ ", Mid(strLogText, intIdx, 1)) = 0) And (IntFound <> 0)
+      strLogText    = Left(strLogText, intIdx - 1) & Chr(01) & Mid(strLogText, intIdx + 1)
+      intIdx        = intIdx + 1
+    Wend
+    intStart        = Instr(intStart, strLogText, strKeyword, vbTextCompare)
+  Wend
+  While Instr(strLogText, Chr(01) & Chr(01)) > 0
+    strLogText      = Replace(Replace(Replace(strLogText, Chr(01) & Chr(01) & Chr(01) & Chr(01), Chr(01)), Chr(01) & Chr(01) & Chr(01), Chr(01)), Chr(01) & Chr(01), Chr(01))
+  Wend
+  strLogText        = Replace(strLogText, Chr(01), "**********")
+  HidePassword      = strLogText
 
 End Function
 

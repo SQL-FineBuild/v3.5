@@ -100,15 +100,14 @@ BEGIN;
     END;
 
     PRINT 'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate##';
-    DECLARE @certpasswordDCB nvarchar(max);
-    SET @certpasswordDCB = QUOTENAME(N'$(strPBCertPassword)', N'''');
-    EXECUTE(N'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_sm_detach SP'';');
+    DECLARE @certPassword nvarchar(max);
+    SET @certPassword=QUOTENAME(N'$(strPBCertPassword)',N'''');
+    EXECUTE(N'CREATE CERTIFICATE _##PDW_SmDetachSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certPassword + N' WITH  SUBJECT = ''For signing sp_pdw_sm_detach SP'';');
     WAITFOR DELAY '00:00:01';
-    EXECUTE(N'ADD SIGNATURE to [sp_pdw_sm_detach] BY CERTIFICATE _##PDW_SmDetachSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
+    EXECUTE(N'ADD SIGNATURE to [sp_pdw_sm_detach] BY CERTIFICATE _##PDW_SmDetachSigningCertificate## WITH PASSWORD=' + @certPassword + N';');
     ALTER CERTIFICATE _##PDW_SmDetachSigningCertificate## REMOVE PRIVATE KEY;
 END;
 GO
-
 DECLARE @certBinaryBytes varbinary(max);
 SET @certBinaryBytes = CERTENCODED(cert_id('_##PDW_SmDetachSigningCertificate##')); 
 DECLARE @cmd nvarchar(max)
@@ -163,11 +162,11 @@ BEGIN;
     END;
 
     PRINT 'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate##';
-    DECLARE @certpasswordDCB nvarchar(max);
-    SET @certpasswordDCB = QUOTENAME(N'$(strPBCertPassword)', N'''');
-    EXECUTE(N'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certpasswordDCB + N' WITH  SUBJECT = ''For signing sp_pdw_polybase_authorize SP'';');
+    DECLARE @certPassword nvarchar(max);
+    SET @certPassword=QUOTENAME(N'$(strPBCertPassword)',N'''');
+    EXECUTE(N'CREATE CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## ENCRYPTION BY PASSWORD = ' + @certPassword + N' WITH  SUBJECT = ''For signing sp_pdw_polybase_authorize SP'';');
     WAITFOR DELAY '00:00:01';
-    EXECUTE(N'ADD SIGNATURE to [sp_pdw_polybase_authorize] BY CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## WITH PASSWORD=' + @certpasswordDCB + N';');
+    EXECUTE(N'ADD SIGNATURE to [sp_pdw_polybase_authorize] BY CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## WITH PASSWORD=' + @certPassword + N';');
     ALTER CERTIFICATE _##PDW_PolyBaseAuthorizeSigningCertificate## REMOVE PRIVATE KEY;
 END;
 GO
