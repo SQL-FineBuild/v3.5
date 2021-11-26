@@ -22,9 +22,10 @@ Dim objADOCmd, objADOConn, objExec, objFolder, objFSO, objFW, objFWRules, objRec
 Dim arrProfFolders, arrProfUsers
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
-Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strLocalAdmin
+Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strKeyPassword, strLocalAdmin
 Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
-Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertThumb, strUser, strUserAccount, strUserDNSDomain, strWaitShort
+Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertThumb, strSystemDataSharedPrimary
+Dim strTDECert, strUser, strUserAccount, strUserDNSDomain, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -49,6 +50,7 @@ Private Sub Class_Initialize
   strGroupDBANonSA  = GetBuildfileValue("GroupDBANonSA")
   strGroupMSA       = GetBuildfileValue("GroupMSA")
   strIsInstallDBA   = GetBuildfileValue("IsInstallDBA")
+  strKeyPassword    = GetBuildfileValue("KeyPassword")
   strLocalAdmin     = GetBuildfileValue("LocalAdmin")
   strNTAuth         = GetBuildfileValue("NTAuth")
   strOSVersion      = GetBuildfileValue("OSVersion")
@@ -59,6 +61,8 @@ Private Sub Class_Initialize
   strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
   strSSLCert        = GetBuildfileValue("SSLCert")
   strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
+  strSystemDataSharedPrimary = GetBuildfileValue("SystemDataSharedPrimary")
+  strTDECert        = GetBuildfileValue("TDECert")
   strUserAccount    = GetBuildfileValue("UserAccount")
   strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
   strWaitShort      = GetBuildfileValue("WaitShort")
@@ -955,6 +959,34 @@ Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
 End Sub
 
 
+Sub SetTDECert(strAction)
+  Call DebugLog("SetTDECert: " & strAction)
+
+  strPath           = FormatFolder(GetBuildfileValue("DirSystemDataSharedPrimary")) & "Cert" & strTDECert
+  Select Case True
+    Case strAction = "INSTALL" 
+      Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE " & strTDECert & " WITH SUBJECT='" & Replace(strTDECert, "_", " ") & "', START_DATE='2000/01/01', EXPIRY_DATE='2999/12/31';""", 0)
+      Call DeleteFile(strPath & ".snk")
+      Call DeleteFile(strPath & ".pvk")
+      Call Util_ExecSQL(strCmdSQL & "-Q", """BACKUP CERTIFICATE " & strTDECert & " TO FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", 0)
+    Case Else
+      Call Util_ExecSQL(strCmdSQL & "-Q", """CREATE CERTIFICATE " & strTDECert & " FROM FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", -1)
+  End Select
+
+End Sub
+
+
+Sub SetWinRMSSL()
+  Call DebugLog("SetWinRMSSL:")
+
+  strCmd            = "POWERSHELL Set-WSManInstance -ResourceURI winrm/config/Listener "
+  strCmd            = strCmd & "-SelectorSet @{Address='*';Transport='HTTPS'} "
+  strCmd            = strCmd & "-ValueSet @{CertificateThumbprint='" & strSSLCertThumb & "'} "
+  Call Util_RunExec(strCmd, "", "", -1)
+
+End Sub
+
+
 End Class
 
 
@@ -1032,4 +1064,12 @@ End Sub
 
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
   Call FBManageSecurity.SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
+End Sub
+
+Sub SetTDECert(strAction)
+  Call FBManageSecurity.SetTDECert(strAction)
+End Sub
+
+Sub SetWinRMSSL()
+  Call FBManageSecurity.SetWinRMSSL()
 End Sub

@@ -20,8 +20,10 @@ Dim FBManageCluster: Set FBManageCluster = New FBManageClusterClass
 Class FBManageClusterClass
   Dim colNodes, colResources
   Dim objCluster, objNode, objShell, objRE, objResource, objWMI, objWMIClus, objWMIDNS, objWMIReg
-  Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network, strClusStorage, strClusterHost, strClusterName, strCmd, strCSVRoot
-  Dim strFailoverClusterDisks, strHKLM, strOSVersion, strPath, strPathNew, strPreferredOwner, strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
+  Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network
+  Dim strClusterNetworkAO, strClusStorage, strClusterHost, strClusterName, strCmd, strCSVRoot
+  Dim strFailoverClusterDisks, strHKLM, strOSVersion, strPath, strPathNew, strPreferredOwner
+  Dim strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
   Dim intIndex
 
 
@@ -43,6 +45,7 @@ Private Sub Class_Initialize
   strClusIPV6Address  = GetBuildfileValue("ClusIPV6Address")
   strClusIPV6Mask     = GetBuildfileValue("ClusIPV6Mask")
   strClusIPV6Network  = GetBuildfileValue("ClusIPV6Network")
+  strClusterNetworkAO = GetBuildfileValue("ClusterNetworkAO")
   strClusStorage    = GetBuildfileValue("ClusStorage")
   strClusterHost    = GetBuildfileValue("ClusterHost")
   strClusterName    = GetBuildfileValue("ClusterName")
@@ -51,6 +54,7 @@ Private Sub Class_Initialize
   strPreferredOwner = GetBuildfileValue("PreferredOwner")
   strServer         = GetBuildfileValue("AuditServer")
   strSQLVersion     = GetBuildfileValue("SQLVersion")
+  strCSVRoot        = GetBuildfileValue("CSVRoot")
   strWaitLong       = GetBuildfileValue("WaitLong")
   strWaitShort      = GetBuildfileValue("WaitShort")
 
@@ -962,6 +966,12 @@ Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireKerberos=1:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        If strClusterNetwork = strClusterNetworkAO Then
+          strCmd    = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RegisterAllProvidersIP = 0"
+          Call Util_RunExec(strCmd, "", strResponseYes, 5024)
+          strCmd    = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV HostRecordTTL = 300"
+          Call Util_RunExec(strCmd, "", strResponseYes, 5024)
+        End If
         If strOSVersion >= "6" Then
           strCmd    = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV DeleteVcoOnResCleanup=1:DWORD "
           Call Util_RunExec(strCmd, "", strResponseYes, 0)
@@ -973,6 +983,28 @@ Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
   Next
 
   Set colClusNodes  = Nothing
+
+End Sub
+
+
+Sub SetClusterCmd()
+  Call DebugLog("SetClusterCmd:")
+  Dim strStatusComplete
+
+  strStatusComplete = GetBuildfileValue("StatusComplete")
+  Select Case True
+    Case GetBuildfileValue("SetupClusterCmdStatus") = strStatusComplete
+      ' Nothing
+    Case strOSVersion < "6.2" 
+      ' Nothing
+    Case Else
+      strCmd        = strCmdPS & " -Command Install-WindowsFeature -Name RSAT-Clustering-AutomationServer"
+      Call Util_RunExec(strCmd, "", "", 0)
+      strCmd        = strCmdPS & " -Command Install-WindowsFeature -Name RSAT-Clustering-CmdInterface"
+      Call Util_RunExec(strCmd, "", "", 0)
+  End Select
+
+  Call SetBuildfileValue("SetupClusterCmdStatus", strStatusComplete)
 
 End Sub
 
@@ -1142,6 +1174,10 @@ End Sub
 
 Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
   Call FBManageCluster.SetClusNetworkProps(strClusterNetwork, strClusterAction)
+End Sub
+
+Sub SetClusterCmd()
+  Call FBManageCluster.SetClusterCmd()
 End Sub
 
 Sub SetResourceOff(strResource, strResourceType)
