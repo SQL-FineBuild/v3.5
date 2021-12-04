@@ -105,7 +105,7 @@ IF EXISTS (SELECT 1 FROM sys.procedures WHERE name = N'FB_AGFailover')
   DROP PROCEDURE dbo.FB_AGFailover;
 GO
 
-CREATE       PROC [dbo].[FB_AGFailover]
+CREATE PROC [dbo].[FB_AGFailover]
  @AGName            NVARCHAR(120)      = '%' -- Name of AG for Failover
 ,@TargetServer      NVARCHAR(128)      = ''  -- Name of desired New Primary server
 ,@Force             CHAR(1)            = 'N' -- Force failover even if Primary and Secondary not synchronised
@@ -115,7 +115,7 @@ CREATE       PROC [dbo].[FB_AGFailover]
 AS
 -- FB_AGFailover
 --
---  Copyright FineBuild Team © 2020.  Distributed under Ms-Pl License
+--  Copyright FineBuild Team © 2019 - 2021.  Distributed under Ms-Pl License
 --
 -- This routine performs a failover of an Availability Group
 -- The routine will work out from the AG Name what type of availability group is involved, and process accordingly
@@ -134,12 +134,13 @@ AS
 -- 28/01/2020  EdV   Initial FineBuild version
 -- 18/03/2020  EdV   Added @Force logic
 -- 06/05/2020  EdV   Improved synchronisation test logic
+-- 02/12/2021  EdV   Improved progress message details
 --
 BEGIN;
   SET NOCOUNT ON;
 
   DECLARE
-   @Server          NVARCHAR(128)
+   @Server          NVARCHAR(128)  = @@servername
   ,@SQLText         NVARCHAR(2000) = ''
   ,@NonSync         INT            = -1;
 
@@ -191,65 +192,58 @@ BEGIN;
  
     SELECT
      @SQLText          = 'Performing Failover of: ' + p.AGName
-    FROM @Parameters p;
-    SELECT
-     @SQLText          = @SQLText + p.CRLF + 'Current Primary Server: '   + a.PrimaryServer
-    FROM @Parameters p
-    JOIN @AGServers a ON a.AGName LIKE p.AGName;
-    SELECT
-     @SQLText          = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.SecondaryServer
+    ,@SQLText          = @SQLText + p.CRLF + 'Current Primary Server: '   + a.PrimaryServer
+    ,@SQLText          = @SQLText + p.CRLF + 'Current Secondary Server: ' + a.SecondaryServer
+    ,@SQLText          = @SQLText + p.CRLF + REPLICATE('*', 40)
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName
     WHERE a.TargetServer = 'Y';
-    SELECT
-     @SQLText          = @SQLText + p.CRLF + REPLICATE('*', 40)
-    FROM @Parameters p;
     PRINT @SQLText;
     
     SELECT
      @SQLText       = p.CRLF + 'EXECUTE [' + a.PrimaryServer   + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @Execute=''' + p.ExecProcess + ''', @RemoteCall=''Y'',@Operation = ''S'''
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName;
+    PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
-    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' PRINT @SQLText;
 
     SELECT
      @SQLText       = p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @Execute=''' + p.ExecProcess + ''', @RemoteCall=''Y'',@Operation = ''S'''
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName;
+    PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
-    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' PRINT @SQLText;
-	
+
     SELECT
      @SQLText       = p.CRLF + 'EXECUTE [' + a.PrimaryServer   + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @Execute=''' + p.ExecProcess + ''', @RemoteCall=''Y'',@Operation = ''R'''
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName;
+    PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
-    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' PRINT @SQLText;
  
     SELECT
      @SQLText       = p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @Execute=''' + p.ExecProcess + ''', @RemoteCall=''Y'',@Operation = ''F'''
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName;
+    PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
-    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' PRINT @SQLText;
 
     SELECT
      @SQLText       = p.CRLF + 'EXECUTE [' + a.PrimaryServer   + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @Execute=''' + p.ExecProcess + ''', @RemoteCall=''Y'',@Operation = ''A'''
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName
     WHERE a.AvailabilityMode = 0 OR a.AGType = 'D';
+    PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
-    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' PRINT @SQLText;
 
     SELECT
      @SQLText       = p.CRLF + 'EXECUTE [' + a.SecondaryServer + '].master.dbo.FB_AGFailover @AGName=''' + p.AGName + ''', @TargetServer=''' + p.TargetServer + ''', @Execute=''' + p.ExecProcess + ''', @RemoteCall=''Y'',@Operation = ''A'''
     FROM @Parameters p
     JOIN @AGServers a ON a.AGName LIKE p.AGName
     WHERE a.AvailabilityMode = 0 OR a.AGType = 'D';
+    PRINT @SQLText;
     IF (SELECT ExecProcess FROM @Parameters) = 'Y'  EXECUTE sp_executeSQL @SQLText;
-    IF (SELECT ExecProcess FROM @Parameters) <> 'Y' PRINT @SQLText;
-	
+
     SELECT
      @SQLText       = REPLICATE('*', 40) +
                       p.CRLF + 'SQL Failover of ' + p.AGName + ' to ' + a.SecondaryServer + ' complete'
@@ -274,23 +268,25 @@ BEGIN;
   IF (SELECT Operation FROM @Parameters) IN ('S','A') -- AG Communication Mode
   BEGIN; 
     SELECT
-     @SQLText       = 'ALTER AVAILABILITY GROUP [' + p.AGName + '] ' +
+     @SQLText       = '/* Processing on ' + @Server + ' */ ' +
+                      p.CRLF + 'ALTER AVAILABILITY GROUP [' + p.AGName + '] ' +
                       p.CRLF + '  MODIFY AVAILABILITY GROUP ON ' 
     FROM @Parameters p;
     SELECT
      @SQLText       = @SQLText + p.CRLF + '  ''' + CASE WHEN p.Operation = 'S' THEN ag.PrimaryServer ELSE ag.SecondaryServer END + ''' '
     ,@SQLText       = @SQLText + 'WITH (AVAILABILITY_MODE=' + CASE WHEN p.Operation = 'S' THEN 'SYNCHRONOUS' ELSE 'ASYNCHRONOUS' END + '_COMMIT),'
     FROM @Parameters p
-	JOIN @AGServers ag ON ag.AGName LIKE p.AGName AND ag.TargetServer = 'Y';
+    JOIN @AGServers ag ON ag.AGName LIKE p.AGName AND ag.TargetServer = 'Y';
     SELECT @SQLText = LEFT(@SQLText, LEN(@SQLText) - 1) + ';';
     PRINT @SQLText;
     EXECUTE sp_executeSQL @SQLText;
-    PRINT 'Processing on Server ' + @Server;
     PRINT '';
   END;
 
   IF (SELECT Operation FROM @Parameters) = 'R' -- AG Role Change
   BEGIN; 
+  SELECT @SQLText   = '/* Processing on ' + @Server + ' */'
+  PRINT @SQLText;
     WHILE (@NonSync <> 0)
     BEGIN;
       SELECT
@@ -301,7 +297,7 @@ BEGIN;
       SELECT
        d.name
       ,drs.synchronization_state_desc
-	  ,drs.log_send_queue_size
+      ,drs.log_send_queue_size
       FROM @Parameters p
       JOIN @AGServers ag ON ag.AGName LIKE p.AGName AND ag.TargetServer = 'Y'
       JOIN [master].[sys].[dm_hadr_database_replica_states] drs ON drs.replica_id = ag.Primary_Id 
@@ -313,27 +309,30 @@ BEGIN;
     END;
 
     SELECT
-     @SQLText       = 'ALTER AVAILABILITY GROUP [' + p.AGName + '] SET (ROLE=SECONDARY);' 
+     @SQLText       = '/* Processing on ' + @Server + ' */ ' +
+                      p.CRLF + 'ALTER AVAILABILITY GROUP [' + p.AGName + '] SET (ROLE=SECONDARY);' 
     FROM @Parameters p;
     PRINT @SQLText;
     EXECUTE sp_executeSQL @SQLText;
-    PRINT 'Processing on Server ' + @Server;
     PRINT '';
   END;
 
   IF (SELECT Operation FROM @Parameters) = 'F' -- AG Failover
   BEGIN; 
+    SELECT 'Before Failover status', * FROM @AGServers;
+    SELECT @SQLText = '/* Processing on ' + @Server + ' */'
+    PRINT @SQLText;
     WHILE (@NonSync <> 0)
     BEGIN;
       SELECT
-       @SQLText     = @SQLText + CASE WHEN @NonSync > 0 THEN 'Waiting for Secondary states to be SYNCHRONIZED'
-                                 ELSE '' END;
+       @SQLText     = CASE WHEN @NonSync > 0 THEN 'Waiting for Secondary states to be SYNCHRONIZED'
+                           ELSE '' END;
       IF @SQLText <> '' PRINT @SQLText;
       WAITFOR DELAY '00:00:01'
       SELECT
        d.name
       ,drs.synchronization_state_desc
-	  ,drs.redo_queue_size
+      ,drs.redo_queue_size
       FROM @Parameters p
       JOIN @AGServers ag ON ag.AGName LIKE p.AGName AND ag.TargetServer = 'Y'
       JOIN [master].[sys].[dm_hadr_database_replica_states] drs ON drs.replica_id = ag.Secondary_Id
@@ -344,17 +343,18 @@ BEGIN;
       FROM @Parameters p;
     END;
     SELECT
-     @SQLText       = CASE WHEN ag.AGType = 'C' THEN 'ALTER AVAILABILITY GROUP [' + p.AGName + '] FAILOVER'
-                           ELSE 'ALTER AVAILABILITY GROUP [' + p.AGName + '] FORCE_FAILOVER_ALLOW_DATA_LOSS' END
+     @SQLText       = '/* Processing on ' + @Server + '*/ ' +
+                      p.CRLF + CASE WHEN ag.AGType = 'C' THEN 'ALTER AVAILABILITY GROUP [' + p.AGName + '] FAILOVER'
+                                    ELSE 'ALTER AVAILABILITY GROUP [' + p.AGName + '] FORCE_FAILOVER_ALLOW_DATA_LOSS' END
     FROM @Parameters p
-    JOIN @AGServers ag ON ag.AGName = p.AGName AND ag.TargetServer = p.TargetServer;
+    JOIN @AGServers ag ON ag.AGName = p.AGName AND ag.TargetServer = 'Y';
     PRINT @SQLText;
     EXECUTE sp_executeSQL @SQLText;
-    PRINT 'Processing on Server ' + @Server;
     PRINT '';
   END;
 
 END;
+
 GO
 ALTER AUTHORIZATION ON [dbo].[FB_AGFailover] TO  SCHEMA OWNER;
 GO

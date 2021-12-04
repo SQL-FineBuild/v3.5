@@ -150,8 +150,8 @@ Sub LogClose()
   Call SetBuildfileValue("FBParm",             strCmd)
   Call SetBuildfileValue("FBParmOld",          "")
 
-  Call SetBuildfileValue("AuditEndDate",       Cstr(Date()))
-  Call SetBuildfileValue("AuditEndTime",       Cstr(Time()))
+  Call SetBuildfileValue("AuditEndDate",       GetStdDate(""))
+  Call SetBuildfileValue("AuditEndTime",       GetStdTime(""))
 
 End Sub
 

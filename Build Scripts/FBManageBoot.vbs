@@ -112,7 +112,7 @@ Sub SetupReboot(strLabel, strDescription)
   End If
 
   strCmd            = objShell.ExpandEnvironmentStrings("%COMSPEC%") & " /d /k " 
-  strCmd            = strCmd &  "TIMEOUT 2 & " ' Add 2 second delay
+  strCmd            = strCmd &  "TIMEOUT 5 & " ' Add 5 second delay
   strCmd            = strCmd &  strFBPath & """" & strFBCmd & """"
   strCmd            = strCmd & " /Type:" & GetBuildfileValue("Type") & " /SQLVersion:" & GetBuildfileValue("AuditVersion") & " /Instance:" & GetBuildfileValue("Instance") & " /Restart:Yes " 
   strStopAt         = GetBuildFileValue("StopAt")

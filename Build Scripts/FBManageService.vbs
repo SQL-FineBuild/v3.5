@@ -20,7 +20,7 @@ Dim FBManageService: Set FBManageService = New FBManageServiceClass
 
 Class FBManageServiceClass
   Dim objFile, objFolder, objFSO, objShell, objWMIReg
-  Dim strActionSQLAS, strActionSQLDB, strActionSQLRS, strCmd, strClusterName, strInstance, strPath, strResSuffixAS, strResSuffixDB
+  Dim strActionSQLAS, strActionSQLDB, strActionSQLRS, strCmd, strClusterName, strComSpec, strInstance, strPath, strResSuffixAS, strResSuffixDB
   Dim strSetupSQLAS, strSetupSQLDB, strSetupSQLDBCluster, strSetupSQLRS, strSetupSQLRSCluster, strWaitLong, strWaitShort
 
 
@@ -35,6 +35,7 @@ Private Sub Class_Initialize
   strActionSQLDB    = GetBuildfileValue("ActionSQLDB")
   strActionSQLRS    = GetBuildfileValue("ActionSQLRS")
   strClusterName    = GetBuildfileValue("ClusterName")
+  strComSpec        = GetBuildfileValue("ComSpec")
   strInstance       = GetBuildfileValue("Instance")
   strResSuffixAS    = GetBuildfileValue("ResSuffixAS")
   strResSuffixDB    = GetBuildfileValue("ResSuffixDB")
@@ -169,7 +170,7 @@ Sub StopSQLServer()
     Case strSetupSQLDB <> "YES"
       ' Nothing
     Case strSetupSQLDBCluster <> "YES"
-      Call Util_RunExec("%COMSPEC% /D /C NET STOP " & GetBuildfileValue("InstSQL") & " /Y", "", "", 2)
+      Call Util_RunExec(strComSpec & " /D /C NET STOP " & GetBuildfileValue("InstSQL") & " /Y", "", "", 2)
     Case Else
       strCmd        = "CLUSTER """ & strClusterName & """ RESOURCE ""SQL Server" & strResSuffixDB & """ /OFF"
       Call Util_RunExec(strCmd, "", "", -1)
@@ -223,12 +224,12 @@ Private Sub CheckSQLReady()
 
   intFound          = 0
   strDebugMsg1      = "SQL Log File Path: " & strErrorLog
-  strCmd            = "%COMSPEC% /D /C FIND /C """ & strSQLLogReinit & """ """ & strErrorLog & """"
+  strCmd            = strComSpec & " /D /C FIND /C """ & strSQLLogReinit & """ """ & strErrorLog & """"
   Call Util_RunExec(strCmd, "", "", 1)
   If intErrSave = 0 Then
     intFound        = 1   
   End If
-  strCmd            = "%COMSPEC% /D /C FIND /C """ & strRestartComplete & """ """ & strErrorLog & """"
+  strCmd            = strComSpec & " /D /C FIND /C """ & strRestartComplete & """ """ & strErrorLog & """"
   While intFound = 0
     Wscript.Sleep strWaitLong 
     Call Util_RunExec(strCmd, "", "", 1)
@@ -279,7 +280,7 @@ Private Sub CheckSQLAgentReady()
 
   intFound          = 0
   strDebugMsg1      = "SQL Log File Path: " & strErrorLog
-  strCmd            = "%COMSPEC% /D /C FIND /C """ & strRestartComplete & """ """ & strErrorLog & """"
+  strCmd            = strComSpec & " /D /C FIND /C """ & strRestartComplete & """ """ & strErrorLog & """"
   While intFound = 0
     Wscript.Sleep strWaitLong 
     Call Util_RunExec(strCmd, "", "", 1)
@@ -425,7 +426,7 @@ Private Sub CheckRSReady()
 
   intFound          = 0
   strDebugMsg1      = "SSRS Log File: " & strErrorLog 
-  strCmd            = "%COMSPEC% /D /C FIND /C """ & strRestartComplete & """ """ & strPath & "\" & strErrorLog & """"
+  strCmd            = strComSpec & " /D /C FIND /C """ & strRestartComplete & """ """ & strPath & "\" & strErrorLog & """"
   While (intFound = 0) And (strErrorLog > "")
     Call Util_RunExec(strCmd, "", "", 1)
     If intErrSave = 0 Then

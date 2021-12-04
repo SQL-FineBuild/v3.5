@@ -24,7 +24,7 @@ Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
 Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
 Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strKeyPassword, strLocalAdmin
 Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
-Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertThumb, strSystemDataSharedPrimary
+Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertFile, strSSLCertThumb, strSystemDataSharedPrimary
 Dim strTDECert, strUser, strUserAccount, strUserDNSDomain, strWaitShort
 
 
@@ -60,6 +60,7 @@ Private Sub Class_Initialize
   strServer         = GetBuildfileValue("AuditServer")
   strSIDDistComUsers  = GetBuildfileValue("SIDDistComUsers")
   strSSLCert        = GetBuildfileValue("SSLCert")
+  strSSLCertFile    = GetBuildfileValue("SSLCertFile")
   strSSLCertThumb   = GetBuildfileValue("SSLCertThumb")
   strSystemDataSharedPrimary = GetBuildfileValue("SystemDataSharedPrimary")
   strTDECert        = GetBuildfileValue("TDECert")
@@ -946,7 +947,7 @@ End Sub
 
 
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
-  Call DebugLog("SetSQLDBSSL: " & strSQLDBPath & " for " & strSQLDBAccount)
+  Call DebugLog("SetSQLDBSSL: " & strSQLDBAccount)
 
   Call SetCertAuth(strSSLCertThumb, strSQLDBAccount)
 
@@ -955,6 +956,27 @@ Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
   strPath           = Left(strPath, Instr(strPath, "\") - 1) 
   strPath           = strHKLMSQL & strPath & "\MSSQLServer\SuperSocketNetLib\"
   Call Util_RegWrite(strPath & "Certificate", strSSLCertThumb, "REG_SZ")
+
+End Sub
+
+
+Sub SetSSLCert()
+  Call DebugLog("SetSSLCert: " & strAction)
+
+  Select Case True
+    Case GetBuildfileValue("SetSSLSelfCert") = "YES"
+      strCmd        = "POWERSHELL New-SelfSignedCertificate -DNSName ""*." & strUserDNSDomain & """ -FriendlyName """ & strSSLCert & """ -CertStoreLocation ""cert:\LocalMachine\My"" -NotBefore GetDate(-Date ""2001-01-01T00:00:00"") -NotAfter GetDate(-Date ""2999-12-31T23:59:59"") "
+      Call Util_RunExec(strCmd, "", "", -1) ' Attributes: RSA, 2048 bit; Defaults: Client Authentication, Server Authentication; Usable for: Digital Signature, Key Encipherment
+      Call SetBuildMessage(strMsgErrorConfig, "/SetSSLSelfCert: is not yet supported in SQL FineBuild")
+    Case CheckFile(strSSLCertFile) = True
+      strSSLCertThumb = GetPSData("$Cert = Import-Certificate -FilePath """ & "path" & """ -CertStoreLocation ""cert:\LocalMachine\My"" | $Cert.FriendlyName = """ & strSSLCert & """ | $Cert.ThumbPrint")
+      Call SetBuildMessage(strMsgErrorConfig, "/SSLCertFile: is not yet supported in SQL FineBuild")
+    Case Else
+      Call SetBuildMessage(strMsgErrorConfig, "Unable to find /SSLCertFile:" & strSSLCertFile)
+  End Select
+
+  strSSLCertThumb   = GetCertAttr(strSSLCert, "Thumbprint")
+  Call SetBuildfileValue("SSLCertThumb", strSSLCertThumb)
 
 End Sub
 
@@ -970,7 +992,7 @@ Sub SetTDECert(strAction)
       Call DeleteFile(strPath & ".pvk")
       Call Util_ExecSQL(strCmdSQL & "-Q", """BACKUP CERTIFICATE " & strTDECert & " TO FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", 0)
     Case Else
-      Call Util_ExecSQL(strCmdSQL & "-Q", """CREATE CERTIFICATE " & strTDECert & " FROM FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", -1)
+      Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE " & strTDECert & " FROM FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', DECRYPTION BY PASSWORD='" & strKeyPassword & "');""", -1)
   End Select
 
 End Sub
@@ -1064,6 +1086,10 @@ End Sub
 
 Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
   Call FBManageSecurity.SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
+End Sub
+
+Sub SetSSLCert()
+'  Call FBManageSecurity.SetSSLCert()
 End Sub
 
 Sub SetTDECert(strAction)

@@ -227,6 +227,7 @@ End Function
 Function GetCmdSQL()
   Call DebugLog("GetCmdSQL:")
 
+  strServInst       = GetBuildfileValue("ServInst")
   strSQLVersion     = GetBuildfileValue("SQLVersion")
   strSQLVersionNum  = GetBuildfileValue("SQLVersionNum")
   strRegTools       = strHKLMSQL & strSQLVersionNum & "\Tools\ClientSetup\"

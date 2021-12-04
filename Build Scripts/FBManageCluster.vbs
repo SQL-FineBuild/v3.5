@@ -21,7 +21,7 @@ Class FBManageClusterClass
   Dim colNodes, colResources
   Dim objCluster, objNode, objShell, objRE, objResource, objWMI, objWMIClus, objWMIDNS, objWMIReg
   Dim strClusIPV4Address, strClusIPV4Mask, strClusIPV4Network, strClusIPV6Address, strClusIPV6Mask, strClusIPV6Network
-  Dim strClusterNetworkAO, strClusStorage, strClusterHost, strClusterName, strCmd, strCSVRoot
+  Dim strClusterNetworkAO, strClusStorage, strClusterHost, strClusterName, strCmd, strCmdPS, strCSVRoot
   Dim strFailoverClusterDisks, strHKLM, strOSVersion, strPath, strPathNew, strPreferredOwner
   Dim strServer, strSQLVersion, strUserDNSDomain, strUserDNSServer, strWaitLong, strWaitShort
   Dim intIndex
@@ -49,6 +49,7 @@ Private Sub Class_Initialize
   strClusStorage    = GetBuildfileValue("ClusStorage")
   strClusterHost    = GetBuildfileValue("ClusterHost")
   strClusterName    = GetBuildfileValue("ClusterName")
+  strCmdPS          = GetBuildfileValue("CmdPS")
   strCSVRoot        = GetBuildfileValue("CSVRoot")
   strOSVersion      = GetBuildfileValue("OSVersion")
   strPreferredOwner = GetBuildfileValue("PreferredOwner")
@@ -176,9 +177,12 @@ Sub ConnectCluster()
       strClusterHost = "YES"
       strClusterName = UCase(objCluster.Name)
   End Select
+
+  strOSVersion      = GetBuildfileValue("OSVersion")
+  strSQLVersion     = GetBuildfileValue("SQLVersion")
+  Set objWMIClus    = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\mscluster")
   Call SetBuildfileValue("ClusterHost", strClusterHost)
   Call SetBuildfileValue("ClusterName", strClusterName)
-  Set objWMIClus    = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\mscluster")
 
 End Sub
 
@@ -291,6 +295,8 @@ Sub MoveToNode(strClusterGroup, strNode)
   Select Case True
     Case strNode = ""
       strNewNode    = strServer
+    Case Instr("\", strNode) > 0
+      strNewNode    = Left(strNode, Instr("\", strNode) - 1)
     Case Else
       strNewNode    = strNode
   End Select
@@ -991,6 +997,7 @@ Sub SetClusterCmd()
   Call DebugLog("SetClusterCmd:")
   Dim strStatusComplete
 
+  strCmdPS          = GetBuildfileValue("CmdPS")
   strStatusComplete = GetBuildfileValue("StatusComplete")
   Select Case True
     Case GetBuildfileValue("SetupClusterCmdStatus") = strStatusComplete
