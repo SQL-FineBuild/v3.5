@@ -992,7 +992,7 @@ Sub SetTDECert(strAction)
       Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE [" & strTDECert & "] WITH SUBJECT='" & Replace(strTDECert, "_", " ") & "', START_DATE='2000/01/01', EXPIRY_DATE='2999/12/31';""", 0)
       Call DeleteFile(strPath & ".snk")
       Call DeleteFile(strPath & ".pvk")
-      Call Util_ExecSQL(strCmdSQL & "-Q", """BACKUP CERTIFICATE " & strTDECert & " TO FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", 0)
+      Call Util_ExecSQL(strCmdSQL & "-Q", """BACKUP CERTIFICATE [" & strTDECert & "] TO FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", 0)
     Case Else
       Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE [" & strTDECert & "] FROM FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', DECRYPTION BY PASSWORD='" & strKeyPassword & "');""", -1)
   End Select
