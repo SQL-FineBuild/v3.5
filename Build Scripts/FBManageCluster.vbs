@@ -966,12 +966,14 @@ Sub SetClusNetworkProps(strClusterNetwork, strClusterAction)
         Call SetResourceOff(strClusterNetwork, "")
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PROP PendingTimeout=600000:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
-        strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV PublishPTRRecords=1 "
-        Call Util_RunExec(strCmd, "", strResponseYes, 0)
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireDNS=1:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
         strCmd      = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RequireKerberos=1:DWORD "
         Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        If Len(strClusterNetwork) <= 15 Then
+          strCmd    = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV PublishPTRRecords=1 "
+          Call Util_RunExec(strCmd, "", strResponseYes, 0)
+        End If
         If strClusterNetwork = strClusterNetworkAO Then
           strCmd    = "CLUSTER """ & strClusterName & """ RESOURCE """ & strClusterNetwork & """ /PRIV RegisterAllProvidersIP = 0"
           Call Util_RunExec(strCmd, "", strResponseYes, 5024)

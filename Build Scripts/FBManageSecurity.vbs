@@ -961,18 +961,20 @@ End Sub
 
 
 Sub SetSSLCert()
-  Call DebugLog("SetSSLCert: " & strAction)
+  Call DebugLog("SetSSLCert:")
+  Dim strSSLCertPassword
 
+  strSSLCertPassword = GetBuildfileValue("SSLCertPassword")
   Select Case True
     Case GetBuildfileValue("SetSSLSelfCert") = "YES"
-      strCmd        = "POWERSHELL New-SelfSignedCertificate -DNSName ""*." & strUserDNSDomain & """ -FriendlyName """ & strSSLCert & """ -CertStoreLocation ""cert:\LocalMachine\My"" -NotBefore GetDate(-Date ""2001-01-01T00:00:00"") -NotAfter GetDate(-Date ""2999-12-31T23:59:59"") "
+      strCmd        = "POWERSHELL New-SelfSignedCertificate -DNSName '*." & strUserDNSDomain & "' -FriendlyName '" & strSSLCert & "' -CertStoreLocation 'cert:\LocalMachine\My' -NotBefore '2001-01-01T00:00:00' -NotAfter '2999-12-31T23:59:59' "
       Call Util_RunExec(strCmd, "", "", -1) ' Attributes: RSA, 2048 bit; Defaults: Client Authentication, Server Authentication; Usable for: Digital Signature, Key Encipherment
-      Call SetBuildMessage(strMsgErrorConfig, "/SetSSLSelfCert: is not yet supported in SQL FineBuild")
     Case CheckFile(strSSLCertFile) = True
-      strSSLCertThumb = GetPSData("$Cert = Import-Certificate -FilePath """ & "path" & """ -CertStoreLocation ""cert:\LocalMachine\My"" | $Cert.FriendlyName = """ & strSSLCert & """ | $Cert.ThumbPrint")
-      Call SetBuildMessage(strMsgErrorConfig, "/SSLCertFile: is not yet supported in SQL FineBuild")
+      strCmd        = "POWERSHELL $Cert = Import-PfxCertificate -FilePath '" & strSSLCertFile & "' -Password '" & strSSLCertPassword & "' -CertStoreLocation 'cert:\LocalMachine\My' | $Cert.FriendlyName = '" & strSSLCert & "' "
+      Call Util_RunExec(strCmd, "", "", -1)
+      Call SetBuildMessage(strMsgError, "/SSLCertFile: is not yet supported in SQL FineBuild")
     Case Else
-      Call SetBuildMessage(strMsgErrorConfig, "Unable to find /SSLCertFile:" & strSSLCertFile)
+      Call SetBuildMessage(strMsgError, "Unable to find /SSLCertFile:" & strSSLCertFile)
   End Select
 
   strSSLCertThumb   = GetCertAttr(strSSLCert, "Thumbprint")
@@ -987,12 +989,12 @@ Sub SetTDECert(strAction)
   strPath           = FormatFolder(GetBuildfileValue("DirSystemDataSharedPrimary")) & "Cert" & strTDECert
   Select Case True
     Case strAction = "INSTALL" 
-      Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE " & strTDECert & " WITH SUBJECT='" & Replace(strTDECert, "_", " ") & "', START_DATE='2000/01/01', EXPIRY_DATE='2999/12/31';""", 0)
+      Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE [" & strTDECert & "] WITH SUBJECT='" & Replace(strTDECert, "_", " ") & "', START_DATE='2000/01/01', EXPIRY_DATE='2999/12/31';""", 0)
       Call DeleteFile(strPath & ".snk")
       Call DeleteFile(strPath & ".pvk")
       Call Util_ExecSQL(strCmdSQL & "-Q", """BACKUP CERTIFICATE " & strTDECert & " TO FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', ENCRYPTION BY PASSWORD='" & strKeyPassword & "');""", 0)
     Case Else
-      Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE " & strTDECert & " FROM FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', DECRYPTION BY PASSWORD='" & strKeyPassword & "');""", -1)
+      Call Util_ExecSQL(strCmdSQL & "-Q", """IF NOT EXISTS (SELECT 1 FROM sys.certificates WHERE name = '" & strTDECert & "') CREATE CERTIFICATE [" & strTDECert & "] FROM FILE='" & strPath & ".snk' WITH PRIVATE KEY (FILE='" & strPath & ".pvk', DECRYPTION BY PASSWORD='" & strKeyPassword & "');""", -1)
   End Select
 
 End Sub
@@ -1089,7 +1091,7 @@ Sub SetSQLDBSSL(strSQLDBPath, strSQLDBAccount)
 End Sub
 
 Sub SetSSLCert()
-'  Call FBManageSecurity.SetSSLCert()
+  Call FBManageSecurity.SetSSLCert()
 End Sub
 
 Sub SetTDECert(strAction)
