@@ -962,17 +962,18 @@ End Sub
 
 Sub SetSSLCert()
   Call DebugLog("SetSSLCert:")
-  Dim strSSLCertPassword
+  Dim strSSLCertPassword, strSSLFile
 
   strSSLCertPassword = GetBuildfileValue("SSLCertPassword")
+  strSSLFile         = FormatFolder(GetBuildfileValue("PathAddComp")) & strSSLCertFile
+
   Select Case True
     Case GetBuildfileValue("SetSSLSelfCert") = "YES"
       strCmd        = "POWERSHELL New-SelfSignedCertificate -DNSName '*." & strUserDNSDomain & "' -FriendlyName '" & strSSLCert & "' -CertStoreLocation 'cert:\LocalMachine\My' -NotBefore '2001-01-01T00:00:00' -NotAfter '2999-12-31T23:59:59' "
       Call Util_RunExec(strCmd, "", "", -1) ' Attributes: RSA, 2048 bit; Defaults: Client Authentication, Server Authentication; Usable for: Digital Signature, Key Encipherment
-    Case CheckFile(strSSLCertFile) = True
-      strCmd        = "POWERSHELL $Cert = Import-PfxCertificate -FilePath '" & strSSLCertFile & "' -Password '" & strSSLCertPassword & "' -CertStoreLocation 'cert:\LocalMachine\My' | $Cert.FriendlyName = '" & strSSLCert & "' "
+    Case CheckFile(strSSLFile) = True
+      strCmd        = "POWERSHELL $Cert = Import-PfxCertificate -FilePath '" & strSSLFile & "' -Password '" & strSSLCertPassword & "' -CertStoreLocation 'cert:\LocalMachine\My' | $Cert.FriendlyName = '" & strSSLCert & "' "
       Call Util_RunExec(strCmd, "", "", -1)
-      Call SetBuildMessage(strMsgError, "/SSLCertFile: is not yet supported in SQL FineBuild")
     Case Else
       Call SetBuildMessage(strMsgError, "Unable to find /SSLCertFile:" & strSSLCertFile)
   End Select
