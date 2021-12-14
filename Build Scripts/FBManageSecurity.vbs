@@ -25,7 +25,7 @@ Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
 Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strKeyPassword, strLocalAdmin
 Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
 Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertFile, strSSLCertThumb, strSystemDataSharedPrimary
-Dim strTDECert, strUser, strUserAccount, strUserDNSDomain, strWaitShort
+Dim strTDECert, strUser, strUserAccount, strUserDNSDomain, strWaitMed, strWaitShort
 
 
 Private Sub Class_Initialize
@@ -66,6 +66,7 @@ Private Sub Class_Initialize
   strTDECert        = GetBuildfileValue("TDECert")
   strUserAccount    = GetBuildfileValue("UserAccount")
   strUserDNSDomain  = GetBuildfileValue("UserDNSDomain")
+  strWaitMed        = GetBuildfileValue("WaitMed")
   strWaitShort      = GetBuildfileValue("WaitShort")
 
   Set arrProfFolders  = objFSO.GetFolder(strProfDir).SubFolders
@@ -297,7 +298,8 @@ Function GetCertAttr(strCertName, strCertAttr)
   Call DebugLog("GetCertAttr: " & strCertName & ", " & strCertAttr)
   Dim strAttrValue
 
-  strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.FriendlyName -match '" & strCertName & "'})." & strCertAttr
+  strCmd            = "$CertName = '" & strCertName & "' ;"
+  strCmd            = strCmd & "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.FriendlyName -like $CertName})." & strCertAttr
   strAttrValue      = GetPSData(strCmd)
 
   Select Case True
@@ -445,6 +447,24 @@ Private Function HexStrToSIDStr(strValue)
   End If
 
   HexStrToSIDStr    = strSIDStr
+
+End Function
+
+
+Function GetCredential(strPassword, strAccount)
+  Call DebugLog("GetCredential: " & strPassword)
+  Dim strAcctName
+
+  GetCredential     = GetBuildfileValue(strPassword)
+  Select Case True
+    Case LCase(GetCredential) <> "encrypted"
+      ' Nothing
+    Case strAccount = ""
+      ' Get credential from Password file
+    Case Else
+      strAcctName   = GetBuildfileValue(strAccount)
+      ' Get credential from Password file
+  End Select
 
 End Function
 
@@ -597,7 +617,8 @@ Sub SetCertAuth(strCertThumb, strAccount)
   ' Code based on https://stackoverflow.com/questions/40046916/how-to-grant-permission-to-user-on-certificate-private-key-using-powershell
   Dim strPKFile
 
-  strCmd            = "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -match '" & strCertThumb & "'}).privatekey.cspkeycontainerinfo.uniquekeycontainername"
+  strCmd            = "$CertThumb = '" & strCertThumb & "' ;"
+  strCmd            = strCmd & "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumb}).privatekey.cspkeycontainerinfo.uniquekeycontainername"
   strPKFile         = GetPSData(strCmd)
 
   strPath           = GetBuildfileValue("VolSys") & ":\ProgramData\Microsoft\Crypto\RSA\MachineKeys\" & strPKFile
@@ -968,16 +989,24 @@ Sub SetSSLCert()
   strSSLFile         = FormatFolder(GetBuildfileValue("PathAddComp")) & strSSLCertFile
 
   Select Case True
-    Case GetBuildfileValue("SetSSLSelfCert") = "YES"
-      strCmd        = "POWERSHELL New-SelfSignedCertificate -DNSName '*." & strUserDNSDomain & "' -FriendlyName '" & strSSLCert & "' -CertStoreLocation 'cert:\LocalMachine\My' -NotBefore '2001-01-01T00:00:00' -NotAfter '2999-12-31T23:59:59' "
+    Case GetBuildfileValue("SSLSelfCert") = "YES"
+      strCmd        = "POWERSHELL $UserDNSDomain = '*." & strUserDNSDomain & "' ;"
+      strCmd        = strCmd & "$SSLCert    = '" & strSSLCert & "' ;"
+      strCmd        = strCmd & "New-SelfSignedCertificate -DNSName $UserDNSDomain -FriendlyName $SSLCert -CertStoreLocation 'cert:\LocalMachine\My' -NotBefore '2001-01-01T00:00:00' -NotAfter '2999-12-31T23:59:59' "
       Call Util_RunExec(strCmd, "", "", -1) ' Attributes: RSA, 2048 bit; Defaults: Client Authentication, Server Authentication; Usable for: Digital Signature, Key Encipherment
     Case CheckFile(strSSLFile) = True
-      strCmd        = "POWERSHELL $Cert = Import-PfxCertificate -FilePath '" & strSSLFile & "' -Password '" & strSSLCertPassword & "' -CertStoreLocation 'cert:\LocalMachine\My' | $Cert.FriendlyName = '" & strSSLCert & "' "
+      strCmd        = "$Password = '" & strSSLCertPassword & "' ;$SSLFile = '" & strSSLFile & "' ;"
+      strCmd        = strCmd & "(Import-PfxCertificate -FilePath $SSLFile -Password (ConvertTo-SecureString -String $Password -AsPlainText -Force) -CertStoreLocation 'cert:\LocalMachine\My').Thumbprint;"
+      strSSLCertThumb = GetPSData(strCmd)
+      strCmd        = "POWERSHELL $SSLCertThumb = '" & LCase(strSSLCertThumb) & "' ;$SSLCert = '" & strSSLCert & "' ;"
+      strCmd        = strCmd & "$Cert = (Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $SSLCertThumb}) ;$Cert.FriendlyName = $SSLCert ;"
       Call Util_RunExec(strCmd, "", "", -1)
+'      Call SetBuildMessage(strMsgError, "/SSLCertFile: processing is not yet supported in SQL FineBuild")
     Case Else
       Call SetBuildMessage(strMsgError, "Unable to find /SSLCertFile:" & strSSLCertFile)
   End Select
 
+  WScript.Sleep strWaitMed
   strSSLCertThumb   = GetCertAttr(strSSLCert, "Thumbprint")
   Call SetBuildfileValue("SSLCertThumb", strSSLCertThumb)
 
@@ -1004,9 +1033,10 @@ End Sub
 Sub SetWinRMSSL()
   Call DebugLog("SetWinRMSSL:")
 
-  strCmd            = "POWERSHELL Set-WSManInstance -ResourceURI winrm/config/Listener "
+  strCmd            = "POWERSHELL $SSLCertThumb = '" & strSSLCertThumb & "' ;"
+  strCmd            = strCmd & "Set-WSManInstance -ResourceURI winrm/config/Listener "
   strCmd            = strCmd & "-SelectorSet @{Address='*';Transport='HTTPS'} "
-  strCmd            = strCmd & "-ValueSet @{CertificateThumbprint='" & strSSLCertThumb & "'} "
+  strCmd            = strCmd & "-ValueSet @{CertificateThumbprint=$SSLCertThumb} "
   Call Util_RunExec(strCmd, "", "", -1)
 
 End Sub
@@ -1045,6 +1075,10 @@ End Function
 
 Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
   GetOUAttr         = FBManageSecurity.GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
+End Function
+
+Function GetCredential(strPassword, strAccount)
+  GetCredential      = FBManageSecurity.GetCredential(strPassword, strAccount)
 End Function
 
 Sub ProcessUser(strLabel, strDescription, strProcess)

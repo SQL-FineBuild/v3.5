@@ -17,8 +17,8 @@
 Option Explicit
 On Error Goto 0
 
-Dim objCommand, objConnection, objNetwork, objRecordSet, objRootDSE
-Dim strDomainDN
+Dim objCommand, objConnection, objNetwork, objRecordSet, objRootDSE, objShell
+Dim strDomainDN, strUserDNSDomain
 
 Call Init()
 Call Process()
@@ -44,7 +44,9 @@ Sub Init()
   objCommand.CommandText = "SELECT ADsPath FROM 'LDAP://" & strDomainDN & "'"
   Set objRecordSet  = objCommand.Execute
 
-  wscript.echo "-- SPN Audit Report --"
+  Set objShell      = WScript.CreateObject ("Wscript.Shell")
+  strUserDNSDomain  = objShell.ExpandEnvironmentStrings("%UserDNSDomain%")
+  Wscript.Echo "-- SPN Audit Report for " & strUserDNSDomain & " at " & Time() & " on " & Date() &" --"
 
 End Sub
 

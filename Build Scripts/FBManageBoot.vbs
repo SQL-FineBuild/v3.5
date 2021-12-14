@@ -135,7 +135,7 @@ Sub SetupReboot(strLabel, strDescription)
   Call DebugLog("Restart Command: " & strCmd)
   Call SetBuildfileValue("RebootStatus", "Done")
 
-  strAdminPassword  = GetBuildfileValue("AdminPassword")
+  strAdminPassword  = GetCredential("AdminPassword", GetBuildfileValue("AuditUser"))
   If strAdminPassword <> "" Then
     strPath         = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\AutoAdminLogon"
     Call Util_RegWrite(strPath, "1", "REG_SZ")
