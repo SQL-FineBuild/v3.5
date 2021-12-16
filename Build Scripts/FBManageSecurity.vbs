@@ -18,10 +18,10 @@ Option Explicit
 Dim FBManageSecurity: Set FBManageSecurity = New FBManageSecurityClass
 
 Class FBManageSecurityClass
-Dim objADOCmd, objADOConn, objExec, objFolder, objFSO, objFW, objFWRules, objRecordSet, objSDUtil, objShell, objWMIReg
+Dim objADOCmd, objADOConn, objLookup, objLookupFile, objExec, objFolder, objFSO, objFW, objFWRules, objRecordSet, objSDUtil, objShell, objWMIReg
 Dim arrProfFolders, arrProfUsers
 Dim intIdx, intBuiltinDomLen, intNTAuthLen, intServerLen
-Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strDirSystemDataBackup
+Dim strBuiltinDom, strClusterName, strCmd, strCmdSQL, strLookupFile, strLookupPassword, strLookupXML, strDirSystemDataBackup
 Dim strGroupDBA, strGroupDBANonSA, strGroupMSA, strHKLM, strHKU, strIsInstallDBA, strKeyPassword, strLocalAdmin
 Dim strNTAuth, strOSVersion, strPath, strProfDir, strProgCacls, strProgReg
 Dim strServer, strSIDDistComUsers, strSSLCert, strSSLCertFile, strSSLCertThumb, strSystemDataSharedPrimary
@@ -33,6 +33,7 @@ Private Sub Class_Initialize
 
   Set objADOConn    = CreateObject("ADODB.Connection")
   Set objADOCmd     = CreateObject("ADODB.Command")
+  Set objLookup     = CreateObject("MSXML2.DomDocument")
   Set objFSO        = CreateObject("Scripting.FileSystemObject")
   Set objFW         = CreateObject("HNetCfg.FwPolicy2")
   Set objFWRules    = objFW.Rules
@@ -45,12 +46,15 @@ Private Sub Class_Initialize
   strBuiltinDom     = GetBuildfileValue("BuiltinDom")
   strClusterName    = GetBuildfileValue("ClusterName")
   strCmdSQL         = GetBuildfileValue("CmdSQL")
+
   strDirSystemDataBackup = GetBuildfileValue("DirSystemDataBackup")
   strGroupDBA       = GetBuildfileValue("GroupDBA")
   strGroupDBANonSA  = GetBuildfileValue("GroupDBANonSA")
   strGroupMSA       = GetBuildfileValue("GroupMSA")
   strIsInstallDBA   = GetBuildfileValue("IsInstallDBA")
   strKeyPassword    = GetBuildfileValue("KeyPassword")
+  strLookupFile     = GetBuildfileValue("LookupFile")
+  strLookupPassword = GetBuildfileValue("LookupPassword")
   strLocalAdmin     = GetBuildfileValue("LocalAdmin")
   strNTAuth         = GetBuildfileValue("NTAuth")
   strOSVersion      = GetBuildfileValue("OSVersion")
@@ -75,6 +79,26 @@ Private Sub Class_Initialize
   objADOConn.Provider            = "ADsDSOObject"
   objADOConn.Open "ADs Provider"
   Set objADOCmd.ActiveConnection = objADOConn
+
+' Code based on https://stackoverflow.com/questions/28352141/convert-a-secure-string-to-plain-text
+  strLookupXML      = "<ROOT/>"
+  Select Case True
+    Case strLookupFile = ""
+      ' Nothing
+    Case CheckFile(strLookupFile) = False
+      ' Nothing
+    Case Else
+        Set objLookupFile = objFSO.OpenTextFile(strLookupFile, 1)
+        strLookupXML = objLookupFile.ReadAll
+        If strLookupPassword <> "" Then
+'         TO DO: Convert encrypted secure string version of strLookupXML to plaintext xml using Powershell. Some possible code shown below:
+'         strCmd       = "$LookupXML = Convert-To-SecureString '" & strLookupXML & "' ;"
+'         strCmd       = strCmd & "$BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($LookupXML) ;"
+'         strCmd       = strCmd & "[System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)"
+'         strLookupXML = GetPSData(strCmd)
+        End If
+  End Select
+  objLookup.LoadXml(strLookupXML)
 
   intBuiltinDomLen  = Len(strBuiltinDom) + 1
   intNTAuthLen      = Len(strNTAuth) + 1
@@ -453,18 +477,26 @@ End Function
 
 Function GetCredential(strPassword, strAccount)
   Call DebugLog("GetCredential: " & strPassword)
-  Dim strAcctName
+  Dim strAcctName, strCredential
 
-  GetCredential     = GetBuildfileValue(strPassword)
+  strCredential     = GetBuildfileValue(strPassword)
   Select Case True
-    Case LCase(GetCredential) <> "encrypted"
+    Case LCase(strCredential) <> "lookup"
       ' Nothing
     Case strAccount = ""
-      ' Get credential from Password file
+      strCredential = GetXMLParm(objLookup, UCase(strPassword), "lookup")
     Case Else
       strAcctName   = GetBuildfileValue(strAccount)
-      ' Get credential from Password file
+      If Instr(strAcctName, "\") > 0 Then
+        strAcctName = Mid(strAcctName, Instr(strAcctName, "\") + 1)
+      End If
+      If Instr(strAcctName, "@") > 0 Then
+        strAcctName = Left(strAcctName, Instr(strAcctName, "@") - 1)
+      End If
+      strCredential = GetXMLParm(objLookup, UCase(strAcctName), "lookup")
   End Select
+
+  GetCredential     = strCredential
 
 End Function
 

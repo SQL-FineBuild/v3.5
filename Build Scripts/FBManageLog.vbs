@@ -108,6 +108,7 @@ Sub LogClose()
   Call HideBuildPassword("AgtPassword")
   Call HideBuildPassword("AsPassword")
   Call HideBuildPassword("CmdShellPassword")
+  Call HideBuildPassword("CredPassword")
   Call HideBuildPassword("DistPassword")
   Call HideBuildPassword("DQPassword")
   Call HideBuildPassword("DRUCtlrPassword")
@@ -362,7 +363,7 @@ Sub ProcessEnd(strStatus)
   End If
 
   Select Case True
-    Case strRestart > strProcessIdLabel
+    Case (strRestart > strProcessIdLabel) And (strRestart <> "YES")
       ' Nothing
     Case strStopAt = ""
       ' Nothing
