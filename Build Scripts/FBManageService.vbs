@@ -364,6 +364,8 @@ Sub StartSSRS(strOpt)
   Select Case True
     Case strSetupSQLRS <> "YES"
       ' Nothing
+    Case strOpt = "FORCE"
+      Call Util_RunExec("NET START " & GetBuildfileValue("InstRS"), "", "", 2)
     Case CheckStatus("SQLRSCluster")
       strClusterGroupRS = GetBuildfileValue("ClusterGroupRS")
       strCmd        = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroupRS & """ /MOVETO:""" & GetBuildfileValue("AuditServer") & """" 
@@ -371,8 +373,6 @@ Sub StartSSRS(strOpt)
       strCmd        = "CLUSTER """ & strClusterName & """ GROUP """ & strClusterGroupRS & """ /ON"
       Call Util_RunExec(strCmd, "", "", 0)
       Call CheckRSReady()
-    Case strOpt = "FORCE"
-      Call Util_RunExec("NET START " & GetBuildfileValue("InstRS"), "", "", 2)
     Case strSetupSQLRSCluster = "YES"
       Call Util_RunExec("NET START " & GetBuildfileValue("InstRS"), "", "", 2)
       Call CheckRSReady()

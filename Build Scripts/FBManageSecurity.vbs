@@ -475,8 +475,8 @@ Private Function HexStrToSIDStr(strValue)
 End Function
 
 
-Function GetCredential(strPassword, strAccount)
-  Call DebugLog("GetCredential: " & strPassword)
+Function GetLookup(strPassword, strAccount)
+  Call DebugLog("GetLookup: " & strPassword)
   Dim strAcctName, strCredential
 
   strCredential     = GetBuildfileValue(strPassword)
@@ -496,7 +496,7 @@ Function GetCredential(strPassword, strAccount)
       strCredential = GetXMLParm(objLookup, UCase(strAcctName), "lookup")
   End Select
 
-  GetCredential     = strCredential
+  GetLookup         = strCredential
 
 End Function
 
@@ -650,7 +650,7 @@ Sub SetCertAuth(strCertThumb, strAccount)
   Dim strPKFile
 
   strCmd            = "$CertThumb = '" & strCertThumb & "' ;"
-  strCmd            = strCmd & "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumb}).privatekey.cspkeycontainerinfo.uniquekeycontainername"
+  strCmd            = strCmd & "(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumb}).PrivateKey.CspKeyContainerInfo.UniqueKeyContainerName"
   strPKFile         = GetPSData(strCmd)
 
   strPath           = GetBuildfileValue("VolSys") & ":\ProgramData\Microsoft\Crypto\RSA\MachineKeys\" & strPKFile
@@ -1024,7 +1024,9 @@ Sub SetSSLCert()
     Case GetBuildfileValue("SSLSelfCert") = "YES"
       strCmd        = "POWERSHELL $UserDNSDomain = '*." & strUserDNSDomain & "' ;"
       strCmd        = strCmd & "$SSLCert    = '" & strSSLCert & "' ;"
-      strCmd        = strCmd & "New-SelfSignedCertificate -DNSName $UserDNSDomain -FriendlyName $SSLCert -CertStoreLocation 'cert:\LocalMachine\My' -NotBefore '2001-01-01T00:00:00' -NotAfter '2999-12-31T23:59:59' "
+      strCmd        = strCmd & "New-SelfSignedCertificate -DNSName $UserDNSDomain -FriendlyName $SSLCert -CertStoreLocation 'cert:\LocalMachine\My' "
+      strCmd        = strCmd & "-NotBefore '2001-01-01T00:00:00' -NotAfter '2999-12-31T23:59:59' "
+      strCmd        = strCmd & "-KeyExportPolicy 'Exportable' -KeySpec 'KeyExchange' -KeyLength 2048 -KeyUsageProperty 'All' "
       Call Util_RunExec(strCmd, "", "", -1) ' Attributes: RSA, 2048 bit; Defaults: Client Authentication, Server Authentication; Usable for: Digital Signature, Key Encipherment
     Case CheckFile(strSSLFile) = True
       strCmd        = "$Password = '" & strSSLCertPassword & "' ;$SSLFile = '" & strSSLFile & "' ;"
@@ -1033,7 +1035,6 @@ Sub SetSSLCert()
       strCmd        = "POWERSHELL $SSLCertThumb = '" & LCase(strSSLCertThumb) & "' ;$SSLCert = '" & strSSLCert & "' ;"
       strCmd        = strCmd & "$Cert = (Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $SSLCertThumb}) ;$Cert.FriendlyName = $SSLCert ;"
       Call Util_RunExec(strCmd, "", "", -1)
-'      Call SetBuildMessage(strMsgError, "/SSLCertFile: processing is not yet supported in SQL FineBuild")
     Case Else
       Call SetBuildMessage(strMsgError, "Unable to find /SSLCertFile:" & strSSLCertFile)
   End Select
@@ -1090,7 +1091,7 @@ Function FormatAccount(strAccount)
 End Function
 
 Function FormatHost(strHostParm, strFDQN)
-  FormatHost       = FBManageSecurity.FormatHost(strHostParm, strFDQN)
+  FormatHost        = FBManageSecurity.FormatHost(strHostParm, strFDQN)
 End Function
 
 Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
@@ -1098,7 +1099,7 @@ Function GetAccountAttr(strUserAccount, strUserDNSDomain, strUserAttr)
 End Function
 
 Function GetCertAttr(strCertName, strCertAttr)
-  GetCertAttr = FBManageSecurity.GetCertAttr(strCertName, strCertAttr)
+  GetCertAttr       = FBManageSecurity.GetCertAttr(strCertName, strCertAttr)
 End Function
 
 Function GetDomainAttr(strDomAttr)
@@ -1110,7 +1111,11 @@ Function GetOUAttr(strOUPath, strUserDNSDomain, strOUAttr)
 End Function
 
 Function GetCredential(strPassword, strAccount)
-  GetCredential      = FBManageSecurity.GetCredential(strPassword, strAccount)
+  GetCredential     = FBManageSecurity.GetLookup(strPassword, strAccount)
+End Function
+
+Function GetLookup(strPassword, strAccount)
+  GetLookup         = FBManageSecurity.GetLookup(strPassword, strAccount)
 End Function
 
 Sub ProcessUser(strLabel, strDescription, strProcess)
